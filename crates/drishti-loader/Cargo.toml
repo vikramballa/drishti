@@ -1,0 +1,19 @@
+[package]
+name = "drishti-loader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cpp_demangle = "0.5.1"
+drishti-model = { version = "0.1.0", path = "../drishti-model" }
+flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
+goblin = "0.10.7"
+md-5 = "0.11.0"
+memmap2 = "0.9.12"
+msvc-demangler = "0.11.0"
+rustc-demangle = "0.1.28"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.11.1"
+thiserror.workspace = true
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }

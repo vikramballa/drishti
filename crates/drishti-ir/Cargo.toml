@@ -1,0 +1,8 @@
+[package]
+name = "drishti-ir"
+version = "0.1.0"
+edition = "2024"
+description = "Drishti intermediate representation (P-code-like, typed, bit-width-aware)"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }

@@ -1,0 +1,18 @@
+[package]
+name = "drishti-cli"
+description = "Drishti command-line interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4.6.7", features = ["derive"] }
+drishti-disasm = { version = "0.1.0", path = "../drishti-disasm" }
+drishti-loader = { version = "0.1.0", path = "../drishti-loader" }
+drishti-model = { version = "0.1.0", path = "../drishti-model" }
+drishti-server = { version = "0.1.0", path = "../drishti-server" }
+serde_json.workspace = true
+
+[[bin]]
+name = "drishti"
+path = "src/main.rs"

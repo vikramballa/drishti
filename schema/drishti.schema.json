@@ -1,0 +1,1302 @@
+{
+  "$defs": {
+    "Addr": {
+      "pattern": "^0x[0-9a-f]+$",
+      "type": "string"
+    },
+    "AiStatus": {
+      "enum": [
+        "verified",
+        "refuted",
+        "unverified",
+        "accepted",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "Annotation": {
+      "description": "User/AI edits; stored separately from immutable engine results (spec §6.3).",
+      "properties": {
+        "addr": {
+          "$ref": "#/$defs/Addr"
+        },
+        "ai_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AiStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "author": {
+          "$ref": "#/$defs/Author"
+        },
+        "binary_sha256": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AnnotationKind"
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "binary_sha256",
+        "addr",
+        "kind",
+        "value",
+        "author",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "Annotation",
+      "type": "object"
+    },
+    "AnnotationKind": {
+      "enum": [
+        "rename_function",
+        "rename_variable",
+        "comment",
+        "type",
+        "bookmark",
+        "tag"
+      ],
+      "type": "string"
+    },
+    "Arch": {
+      "enum": [
+        "x86",
+        "x86_64",
+        "arm",
+        "aarch64",
+        "mips",
+        "mips64",
+        "riscv64",
+        "ppc",
+        "dalvik",
+        "cil",
+        "jvm",
+        "wasm",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "Author": {
+      "enum": [
+        "user",
+        "ai"
+      ],
+      "type": "string"
+    },
+    "BasicBlock": {
+      "properties": {
+        "end": {
+          "$ref": "#/$defs/Addr",
+          "description": "Exclusive."
+        },
+        "instructions": {
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        },
+        "start": {
+          "$ref": "#/$defs/Addr"
+        },
+        "successors": {
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "instructions",
+        "successors"
+      ],
+      "type": "object"
+    },
+    "ChildFile": {
+      "properties": {
+        "arch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Arch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Architecture slice name for fat Mach-O children (e.g. \"arm64\")."
+        },
+        "format": {
+          "$ref": "#/$defs/Format"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Empty when the child was listed but not extracted (e.g. over size limit).",
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "format",
+        "size"
+      ],
+      "type": "object"
+    },
+    "Confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "string"
+    },
+    "Container": {
+      "enum": [
+        "zip",
+        "fat-macho",
+        "firmware"
+      ],
+      "type": "string"
+    },
+    "Decompilation": {
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineId"
+        },
+        "language": {
+          "$ref": "#/$defs/Language"
+        },
+        "line_map": {
+          "items": {
+            "$ref": "#/$defs/LineMap"
+          },
+          "type": "array"
+        },
+        "variables": {
+          "items": {
+            "$ref": "#/$defs/Variable"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "engine",
+        "language",
+        "code"
+      ],
+      "type": "object"
+    },
+    "DocFeature": {
+      "description": "An active or risky feature (scripts, auto-actions, attachments, …).",
+      "properties": {
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "name",
+        "count",
+        "severity",
+        "explanation"
+      ],
+      "type": "object"
+    },
+    "DocSignature": {
+      "description": "A digital signature field.",
+      "properties": {
+        "certificate_names": {
+          "description": "Names found in the signature's certificates (signer and issuer).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "covers_whole_file": {
+          "description": "Whether the signed byte range reaches the end of the file. `false`\nmeans the file was changed after this signature was applied.",
+          "type": "boolean"
+        },
+        "issuer": {
+          "description": "Certificate authority that issued the signer's certificate.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "covers_whole_file"
+      ],
+      "type": "object"
+    },
+    "DocumentReport": {
+      "description": "Provenance and safety triage for a document (currently PDF).",
+      "properties": {
+        "clues": {
+          "items": {
+            "$ref": "#/$defs/OriginClue"
+          },
+          "type": "array"
+        },
+        "embedded_files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "encrypted": {
+          "type": "boolean"
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/DocFeature"
+          },
+          "type": "array"
+        },
+        "fonts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "history": {
+          "items": {
+            "$ref": "#/$defs/HistoryEvent"
+          },
+          "type": "array"
+        },
+        "images": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "linearized": {
+          "type": "boolean"
+        },
+        "links": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "metadata": {
+          "items": {
+            "$ref": "#/$defs/MetaField"
+          },
+          "type": "array"
+        },
+        "page_size": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "revisions": {
+          "description": "Saved revisions (1 = written once; more = incremental updates).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "risk": {
+          "$ref": "#/$defs/Severity",
+          "description": "Highest feature severity (`info` when nothing risky was found)."
+        },
+        "signatures": {
+          "items": {
+            "$ref": "#/$defs/DocSignature"
+          },
+          "type": "array"
+        },
+        "verdict": {
+          "description": "One-sentence plain-language safety verdict.",
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "encrypted",
+        "linearized",
+        "revisions",
+        "metadata",
+        "history",
+        "signatures",
+        "fonts",
+        "images",
+        "links",
+        "embedded_files",
+        "features",
+        "clues",
+        "risk",
+        "verdict"
+      ],
+      "title": "DocumentReport",
+      "type": "object"
+    },
+    "Edge": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EdgeKind"
+        },
+        "target": {
+          "$ref": "#/$defs/Addr"
+        }
+      },
+      "required": [
+        "target",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "EdgeKind": {
+      "enum": [
+        "fallthrough",
+        "jump",
+        "true",
+        "false",
+        "switch",
+        "indirect"
+      ],
+      "type": "string"
+    },
+    "Endian": {
+      "enum": [
+        "little",
+        "big"
+      ],
+      "type": "string"
+    },
+    "EngineId": {
+      "enum": [
+        "core",
+        "ghidra",
+        "angr",
+        "radare2",
+        "rizin",
+        "jadx",
+        "ilspy",
+        "wabt",
+        "binwalk",
+        "oletools",
+        "yara"
+      ],
+      "type": "string"
+    },
+    "ErrorEntry": {
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "FileInfo": {
+      "properties": {
+        "arch": {
+          "$ref": "#/$defs/Arch"
+        },
+        "bits": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "children": {
+          "items": {
+            "$ref": "#/$defs/ChildFile"
+          },
+          "type": "array"
+        },
+        "compiler_hints": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "container": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Container"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endian": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Endian"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entropy": {
+          "description": "Overall Shannon entropy of the file, 0..8.",
+          "format": "float",
+          "type": "number"
+        },
+        "entry_point": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Addr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "file_name": {
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/Format"
+        },
+        "is_packed_suspected": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "is_stripped": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "libraries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "md5": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sha256",
+        "md5",
+        "size",
+        "file_name",
+        "format",
+        "arch",
+        "platform",
+        "entropy"
+      ],
+      "type": "object"
+    },
+    "FileOrigin": {
+      "description": "Where a file on disk came from, from macOS download metadata\n(`kMDItemWhereFroms`, `com.apple.quarantine`). Only available for files\nopened in place; browser uploads do not carry it.",
+      "properties": {
+        "downloaded_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "downloaded_by": {
+          "description": "The app that downloaded or received it (e.g. \"Safari\", \"Mail\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quarantined": {
+          "type": "boolean"
+        },
+        "where_from": {
+          "description": "Download URL and the page it was linked from, or a mail sender/subject.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "quarantined"
+      ],
+      "title": "FileOrigin",
+      "type": "object"
+    },
+    "Finding": {
+      "properties": {
+        "addrs": {
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FindingKind"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "source": {
+          "description": "Engine id or `\"rule\"`.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "severity",
+        "title",
+        "detail",
+        "source"
+      ],
+      "type": "object"
+    },
+    "FindingKind": {
+      "enum": [
+        "yara",
+        "suspicious_api",
+        "packer",
+        "macro",
+        "high_entropy",
+        "embedded_file",
+        "other"
+      ],
+      "type": "string"
+    },
+    "Format": {
+      "oneOf": [
+        {
+          "enum": [
+            "elf",
+            "pe",
+            "pe-dotnet",
+            "coff",
+            "macho",
+            "macho-fat",
+            "java-class",
+            "dex",
+            "apk",
+            "ipa",
+            "jar",
+            "ooxml",
+            "zip",
+            "wasm",
+            "ole",
+            "pdf",
+            "raw",
+            "firmware",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "asar",
+          "description": "Electron application archive (modern desktop apps).",
+          "type": "string"
+        },
+        {
+          "const": "archive",
+          "description": "Unix `ar` archive (static libraries).",
+          "type": "string"
+        }
+      ]
+    },
+    "Function": {
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BasicBlock"
+          },
+          "type": "array"
+        },
+        "called_by": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        },
+        "calls": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        },
+        "decompiled": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decompilation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineId"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "entry": {
+          "$ref": "#/$defs/Addr"
+        },
+        "is_library": {
+          "type": "boolean"
+        },
+        "is_thunk": {
+          "type": "boolean"
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_source": {
+          "$ref": "#/$defs/NameSource"
+        },
+        "noreturn": {
+          "description": "Never returns to its caller (by name, or proven by propagation).",
+          "type": "boolean"
+        },
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "engine",
+        "engine_version",
+        "entry",
+        "name",
+        "name_source"
+      ],
+      "type": "object"
+    },
+    "FunctionMetrics": {
+      "properties": {
+        "block_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cyclomatic": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "edge_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "goto_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "loc": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "block_count",
+        "edge_count",
+        "cyclomatic"
+      ],
+      "type": "object"
+    },
+    "HistoryEvent": {
+      "description": "A step from the document's recorded edit history (XMP `xmpMM:History`).",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "software": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "when": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "Language": {
+      "enum": [
+        "c",
+        "java",
+        "csharp",
+        "wasm-pseudo"
+      ],
+      "type": "string"
+    },
+    "LineMap": {
+      "properties": {
+        "addrs": {
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        },
+        "line": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "addrs"
+      ],
+      "type": "object"
+    },
+    "MetaField": {
+      "description": "One metadata value and where in the document it was read from.",
+      "properties": {
+        "key": {
+          "description": "Human-readable key, e.g. \"Producer\", \"Created\".",
+          "type": "string"
+        },
+        "source": {
+          "description": "`info` (document information dictionary), `xmp` (XMP packet),\n`trailer`, or `previous` (an older revision's information dictionary).",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value",
+        "source"
+      ],
+      "type": "object"
+    },
+    "NameSource": {
+      "enum": [
+        "symbol",
+        "engine",
+        "signature",
+        "user",
+        "ai"
+      ],
+      "type": "string"
+    },
+    "OriginClue": {
+      "description": "A plain-language clue about where the document came from.",
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "text": {
+          "type": "string"
+        },
+        "topic": {
+          "description": "`made_with`, `device`, `author`, `dates`, `edited`, `signed`,\n`scanned`, `region`, `identity`, `downloaded`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic",
+        "text",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "Platform": {
+      "enum": [
+        "windows",
+        "linux",
+        "macos",
+        "ios",
+        "android",
+        "dotnet",
+        "java",
+        "web",
+        "embedded",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "Section": {
+      "properties": {
+        "entropy": {
+          "description": "Shannon entropy of the file-backed bytes, 0..8.",
+          "format": "float",
+          "type": "number"
+        },
+        "file_offset": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "perms": {
+          "description": "e.g. \"r-x\", \"rw-\"",
+          "type": "string"
+        },
+        "vaddr": {
+          "$ref": "#/$defs/Addr"
+        },
+        "vsize": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "vaddr",
+        "vsize",
+        "file_offset",
+        "file_size",
+        "perms",
+        "entropy"
+      ],
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "string"
+    },
+    "Status": {
+      "enum": [
+        "ok",
+        "partial",
+        "failed",
+        "timeout"
+      ],
+      "type": "string"
+    },
+    "StringEncoding": {
+      "enum": [
+        "ascii",
+        "utf16le",
+        "utf8"
+      ],
+      "type": "string"
+    },
+    "StringRef": {
+      "properties": {
+        "addr": {
+          "$ref": "#/$defs/Addr"
+        },
+        "encoding": {
+          "$ref": "#/$defs/StringEncoding"
+        },
+        "value": {
+          "type": "string"
+        },
+        "xrefs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Addr"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "addr",
+        "value",
+        "encoding"
+      ],
+      "type": "object"
+    },
+    "Symbol": {
+      "properties": {
+        "addr": {
+          "$ref": "#/$defs/Addr"
+        },
+        "demangled": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/SymbolKind"
+        },
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/SymbolSource"
+        }
+      },
+      "required": [
+        "name",
+        "addr",
+        "kind",
+        "source"
+      ],
+      "type": "object"
+    },
+    "SymbolKind": {
+      "enum": [
+        "function",
+        "object",
+        "import",
+        "export",
+        "label",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "SymbolSource": {
+      "enum": [
+        "symtab",
+        "dynsym",
+        "export_table",
+        "import_table",
+        "pdb",
+        "dwarf",
+        "engine",
+        "user",
+        "ai"
+      ],
+      "type": "string"
+    },
+    "Variable": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "storage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Xref": {
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/Addr"
+        },
+        "kind": {
+          "$ref": "#/$defs/XrefKind"
+        },
+        "to": {
+          "$ref": "#/$defs/Addr"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "XrefKind": {
+      "enum": [
+        "call",
+        "jump",
+        "data_read",
+        "data_write",
+        "string",
+        "pointer"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "duration_ms": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "engine": {
+      "$ref": "#/$defs/EngineId"
+    },
+    "engine_version": {
+      "type": "string"
+    },
+    "errors": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ErrorEntry"
+      },
+      "type": "array"
+    },
+    "exports": {
+      "items": {
+        "$ref": "#/$defs/Symbol"
+      },
+      "type": "array"
+    },
+    "file": {
+      "$ref": "#/$defs/FileInfo"
+    },
+    "findings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "type": "array"
+    },
+    "functions": {
+      "items": {
+        "$ref": "#/$defs/Function"
+      },
+      "type": "array"
+    },
+    "imports": {
+      "items": {
+        "$ref": "#/$defs/Symbol"
+      },
+      "type": "array"
+    },
+    "options_hash": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "$ref": "#/$defs/Section"
+      },
+      "type": "array"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status"
+    },
+    "strings": {
+      "items": {
+        "$ref": "#/$defs/StringRef"
+      },
+      "type": "array"
+    },
+    "symbols": {
+      "items": {
+        "$ref": "#/$defs/Symbol"
+      },
+      "type": "array"
+    },
+    "xrefs": {
+      "items": {
+        "$ref": "#/$defs/Xref"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "engine",
+    "engine_version",
+    "options_hash",
+    "started_at",
+    "duration_ms",
+    "status",
+    "file",
+    "sections",
+    "symbols",
+    "imports",
+    "exports",
+    "strings",
+    "functions",
+    "xrefs"
+  ],
+  "title": "AnalysisResult",
+  "type": "object"
+}

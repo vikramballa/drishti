@@ -1,0 +1,49 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0" # Sundays 03:00 UTC: weekly fuzz run
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: make web
+      - run: make check
+        env:
+          # PE samples are cross-built with clang + rust-lld; fail instead of skipping.
+          DRISHTI_REQUIRE_PE: "1"
+      # Browser E2E on macOS, where the symbolised corpus sample builds.
+      - if: matrix.os == 'macos-latest'
+        run: make corpus && (cd web && npx playwright install chromium) && make e2e
+      - if: failure() && matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with: { name: e2e-traces, path: web/test-results, if-no-files-found: ignore }
+  fuzz:
+    # Weekly 1 h per target (ROADMAP A6); manual runs via "Run workflow".
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz --locked
+      - run: make fuzz-all
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: fuzz-artifacts, path: fuzz/artifacts }
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install cargo-audit && cargo audit
+      - run: cd web && npm ci && npm audit --omit=dev

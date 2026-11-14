@@ -1,0 +1,40 @@
+# cargo-fuzz targets (spec §8.3). Run with: cargo +nightly fuzz run loader
+[package]
+name = "drishti-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+drishti-loader = { path = "../crates/drishti-loader" }
+drishti-disasm = { path = "../crates/drishti-disasm" }
+
+[workspace]
+
+[[bin]]
+name = "detect"
+path = "fuzz_targets/detect.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "loader"
+path = "fuzz_targets/loader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "disasm"
+path = "fuzz_targets/disasm.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "pdf"
+path = "fuzz_targets/pdf.rs"
+test = false
+doc = false

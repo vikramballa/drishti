@@ -1,0 +1,27 @@
+[package]
+name = "drishti-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+axum = { version = "0.8.9", features = ["ws"] }
+drishti-disasm = { version = "0.1.0", path = "../drishti-disasm" }
+drishti-loader = { version = "0.1.0", path = "../drishti-loader" }
+drishti-model = { version = "0.1.0", path = "../drishti-model" }
+futures-util = "0.3.34"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["client", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+mime_guess = "2.0.5"
+regex = "1.13.1"
+rusqlite = { version = "0.42.0", features = ["bundled"] }
+rust-embed = "8.14.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.11.1"
+thiserror.workspace = true
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "fs", "sync", "time", "signal", "io-util", "process"] }
+tracing.workspace = true
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

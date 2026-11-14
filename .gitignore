@@ -1,0 +1,10 @@
+/target
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+/corpus/out
+/web/node_modules
+/.playwright-mcp
+.DS_Store
+/web/test-results
+/web/playwright-report
