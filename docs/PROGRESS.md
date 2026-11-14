@@ -1,6 +1,6 @@
 # Progress
 
-Updated 2026-11-12 (tools + UI round).
+Updated 2026-11-14 (Day 1: commit, fuzz, tag).
 
 ## Phase 0 — Foundations ✅ (adapted)
 - [x] Rust workspace (`crates/*`), web app, `Makefile` (instead of `justfile`)
@@ -75,7 +75,14 @@ in DECISIONS #26 (before them, the same runs peaked at 265 / 492 / 754 MB).
 - [x] `make check` green; schema regenerated (`noreturn`); DECISIONS #21–28
 
 ### Fuzz run
-FUZZ_RESULT_PLACEHOLDER
+Clean re-run 2026-11-14 (`cargo fuzz run <t> -O`, ASan, `-max_total_time=3600 -rss_limit_mb=2048 -timeout=10`, 4 targets in parallel on an M-series Mac): **0 crashes, 0 timeouts, 0 OOMs**, `fuzz/artifacts/` empty.
+
+| Target | Runs (1 h) | Coverage | Corpus | Peak RSS (ASan) |
+|---|---|---|---|---|
+| detect | 12 519 304 | 2 166 | 2 096 files / 3.1 MB | 1 081 MB |
+| loader | 2 715 563 | 4 364 | 2 791 / 16 MB | 863 MB |
+| disasm | 591 526 | 8 592 | 3 854 / 51 MB | 674 MB |
+| pdf | 1 217 182 | 3 301 | 2 897 / 20 MB | 902 MB |
 
 ## Plain-language round (2026-11-12): documents, download origin, local AI
 - [x] PDF provenance + safety (`drishti doc FILE [--json]`, Overview cards, report.md, MCP `document_report`): producing software/device, author, created/modified with time zone → region hint, revisions and signature-only saves, IDs, XMP history, earlier-revision metadata, signer/issuer from certificates, page size, fonts, scan detection, links, attachments, scripts/auto-actions/launch/XFA with `#xx` de-obfuscation, document-level JS name trees. Tested on 55 real PDFs (Word, Google Docs, Chrome, Canva, LaTeX, ReportLab, WeasyPrint, jsPDF, iText/JasperReports, Illustrator, PandaDoc, e-signed): ~10 ms and ≤ 15 MB each. Fuzz target `pdf` (2 min, 96 578 runs, 0 crashes)
@@ -131,3 +138,9 @@ Requested features (6) analysed; built the three that reuse existing infra end-t
 - [x] **UI**: "Weak spots" page (Simple + Expert, links to code, plain language) and a plain-English box in Functions. Verified in a real browser (Playwright): weak spots render with confidence badges + paths; NL box translates "large complex functions that format strings" → `calls:printf complexity>20` → 3 matches. E2E journey extended with both.
 - [x] **`drishti-ir` crate (milestone B1)**: typed P-code-like IR (varnodes, spec §7.4 op set), pretty-printer, reference interpreter; `docs/IR.md`. 7 unit tests (add/carry, signed overflow, load/store, concat/extract, cbranch). B2 (AArch64/x86-64 lifters) and B3 (Unicorn diff tests) are next.
 - [x] `make check` green (fmt, clippy -D warnings, web typecheck, all tests, schema fresh). Not committed (user hasn't asked).
+
+## Day 1 (2026-11-14): saved, fuzzed, tagged
+- [x] First commit pushed to github.com/vikramballa/drishti; daily checklist in `docs/DAILY_PLAN.md`
+- [x] Fuzz: clean 1 h re-run of all 4 targets, 0 crashes (table under "Fuzz run" above)
+- [x] `make check` was failing on `cargo fmt` (stray blank line in `drishti-server/src/ai.rs`); fixed, now green (90 tests)
+- [x] Tagged `v0.1.0`

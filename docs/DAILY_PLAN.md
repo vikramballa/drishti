@@ -13,10 +13,10 @@ Big-picture order and reasons: [ROADMAP.md](ROADMAP.md). Finished work: [PROGRES
 
 ## Week 1 — Save, shrink, trust
 
-- [ ] **Day 1 — Save the work**
-  - [ ] First git commit of the whole project (owner approves)
-  - [ ] Re-run the fuzz targets and replace `FUZZ_RESULT_PLACEHOLDER` in PROGRESS.md with the real result
-  - [ ] Tag `v0.1.0`
+- [x] **Day 1 — Save the work** ✅ 2026-11-14
+  - [x] First git commit of the whole project, pushed to github.com/vikramballa/drishti (2026-11-14, `994e8d9`)
+  - [x] Re-run the fuzz targets (1 h each, 17.0 M runs, 0 crashes) and record the result in PROGRESS.md
+  - [x] Tag `v0.1.0`
   - Done when: `git log` shows the commit, the tag exists, and PROGRESS.md has a real fuzz result
 
 - [ ] **Day 2 — Shrink the IR (before writing the lifter)**

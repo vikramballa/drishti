@@ -29,7 +29,6 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-
 pub const DEFAULT_URL: &str = "http://127.0.0.1:11434";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 /// Loading a model into memory on first use can take a while.
