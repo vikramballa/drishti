@@ -20,11 +20,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-const SCRIPT: &str = include_str!("../../scripts/DrishtiDecompile.java");
+const SCRIPTS: [(&str, &str); 2] = [
+    (
+        "DrishtiDecompile.java",
+        include_str!("../../scripts/DrishtiDecompile.java"),
+    ),
+    (
+        "DrishtiFunctions.java",
+        include_str!("../../scripts/DrishtiFunctions.java"),
+    ),
+];
 /// Above this size Ghidra imports without auto-analysis (which would take
 /// a very long time and several GB on large apps) and builds only the
 /// requested functions.
-const FULL_ANALYSIS_MAX: u64 = 12 << 20;
+pub(super) const FULL_ANALYSIS_MAX: u64 = 12 << 20;
 
 #[derive(Deserialize)]
 pub struct DecompQ {
@@ -36,9 +45,11 @@ pub struct DecompQ {
 fn script_dir(st: &Shared) -> Result<PathBuf, String> {
     let d = tools_dir(st).join("scripts");
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
-    let p = d.join("DrishtiDecompile.java");
-    if std::fs::read_to_string(&p).ok().as_deref() != Some(SCRIPT) {
-        std::fs::write(&p, SCRIPT).map_err(|e| e.to_string())?;
+    for (name, src) in SCRIPTS {
+        let p = d.join(name);
+        if std::fs::read_to_string(&p).ok().as_deref() != Some(src) {
+            std::fs::write(&p, src).map_err(|e| e.to_string())?;
+        }
     }
     Ok(d)
 }
@@ -140,39 +151,71 @@ fn ghidra_imported(st: &Shared, sha: &str) -> bool {
     work_dir(st, "ghidra", sha).join("imported").is_file()
 }
 
-/// Ghidra input: the analysed slice of a universal binary as its own file
-/// (Ghidra would otherwise import only the first slice).
-fn ghidra_input(work: &Path, input: &Path, s: &Session) -> Result<PathBuf, String> {
-    let img = s.image.as_deref().ok_or("no image")?;
-    if s.info.format == Format::MachoFat {
-        let out = work.join("slice.bin");
-        if !out.is_file() {
-            let bytes = img.blob.as_ref().as_ref();
-            let end = img
-                .slice_offset
-                .checked_add(img.slice_len)
-                .ok_or("bad slice")?;
-            let slice = bytes.get(img.slice_offset..end).ok_or("bad slice")?;
-            std::fs::write(&out, slice).map_err(|e| e.to_string())?;
-        }
-        return Ok(out);
+/// The analysed slice of a universal binary, written once to
+/// `work/slice.bin`; `None` for other files. External tools get this file
+/// instead of the universal one: Ghidra would import the first slice, and
+/// radare2's `-a/-b` can't tell two slices of the same architecture apart
+/// (`/bin/ls` has both `arm64e` and `arm64e.x1`).
+pub(super) fn fat_slice(work: &Path, s: &Session) -> Result<Option<PathBuf>, String> {
+    if s.info.format != Format::MachoFat {
+        return Ok(None);
     }
-    Ok(input_link(work, input, s.info.format))
+    let img = s.image.as_deref().ok_or("no image")?;
+    let out = work.join("slice.bin");
+    if !out.is_file() {
+        let bytes = img.blob.as_ref().as_ref();
+        let end = img
+            .slice_offset
+            .checked_add(img.slice_len)
+            .ok_or("bad slice")?;
+        let slice = bytes.get(img.slice_offset..end).ok_or("bad slice")?;
+        std::fs::create_dir_all(work).map_err(|e| e.to_string())?;
+        std::fs::write(&out, slice).map_err(|e| e.to_string())?;
+    }
+    Ok(Some(out))
 }
 
-async fn ghidra(
+/// Ghidra input: the analysed slice of a universal binary, else the file.
+fn ghidra_input(work: &Path, input: &Path, s: &Session) -> Result<PathBuf, String> {
+    Ok(match fat_slice(work, s)? {
+        Some(p) => p,
+        None => input_link(work, input, s.info.format),
+    })
+}
+
+/// A Drishti Ghidra script run: script file, its output file name (in the
+/// work folder), arguments after `<out.json> <image-base>`, and the time
+/// limit once the file is imported.
+pub(super) struct GhidraJob {
+    pub script: &'static str,
+    pub out_name: String,
+    pub args: Vec<OsString>,
+    pub timeout: Duration,
+}
+
+/// Run one of the Drishti Ghidra scripts against the file's Ghidra project,
+/// importing it first if needed (full auto-analysis for files up to
+/// [`FULL_ANALYSIS_MAX`]). The script writes JSON to `out`, which is
+/// returned parsed. `timeout` applies once the file is imported.
+pub(super) async fn ghidra_script(
     st: &Shared,
     bin: &Path,
     input: &Path,
     s: &Arc<Session>,
-    addr: u64,
-) -> Result<Value, String> {
+    job: GhidraJob,
+) -> Result<(Value, u64), String> {
+    let GhidraJob {
+        script,
+        out_name,
+        args: script_args,
+        timeout,
+    } = job;
     let t = def("ghidra").ok_or("ghidra unknown")?;
     let work = work_dir(st, "ghidra", &s.sha);
     std::fs::create_dir_all(work.join("proj")).map_err(|e| e.to_string())?;
     let scripts = script_dir(st)?;
     let img = s.image.as_deref().ok_or("no image")?;
-    let out = work.join(format!("out-{addr:x}.json"));
+    let out = work.join(&out_name);
     let _ = std::fs::remove_file(&out);
     let marker = work.join("imported");
     let mut args: Vec<OsString> = vec![work.join("proj").into(), "drishti".into()];
@@ -205,13 +248,12 @@ async fn ghidra(
         "-scriptPath".into(),
         scripts.into_os_string(),
         "-postScript".into(),
-        "DrishtiDecompile.java".into(),
+        script.into(),
         out.clone().into_os_string(),
         format!("{:x}", img.image_base).into(),
-        format!("{addr:x}").into(),
-        "-max-cpu".into(),
-        "2".into(),
     ]);
+    args.extend(script_args);
+    args.extend(["-max-cpu".into(), "2".into()]);
     let o = run(
         st,
         RunSpec {
@@ -221,7 +263,11 @@ async fn ghidra(
             work: work.clone(),
             extra_writable: Vec::new(),
             env: vec![("GHIDRA_MAXMEM".into(), "2G".into())],
-            timeout: Duration::from_secs(if first { t.timeout_s } else { 240 }),
+            timeout: if first {
+                Duration::from_secs(t.timeout_s)
+            } else {
+                timeout
+            },
             stdout_cap: 256 << 10,
         },
     )
@@ -230,7 +276,7 @@ async fn ghidra(
         return Err(if first {
             "Ghidra took too long to load this file. Very large apps can take longer than 15 minutes; try radare2 instead.".into()
         } else {
-            "Ghidra took too long on this function.".into()
+            "Ghidra took too long on this request.".into()
         });
     }
     let v: Value = match std::fs::read(&out)
@@ -255,13 +301,30 @@ async fn ghidra(
     if first {
         std::fs::write(&marker, &prog_name).map_err(|e| e.to_string())?;
     }
+    Ok((v, o.duration_ms))
+}
+
+async fn ghidra(
+    st: &Shared,
+    bin: &Path,
+    input: &Path,
+    s: &Arc<Session>,
+    addr: u64,
+) -> Result<Value, String> {
+    let job = GhidraJob {
+        script: "DrishtiDecompile.java",
+        out_name: format!("out-{addr:x}.json"),
+        args: vec![format!("{addr:x}").into()],
+        timeout: Duration::from_secs(240),
+    };
+    let (v, ms) = ghidra_script(st, bin, input, s, job).await?;
     let f = v["functions"].get(0).cloned().unwrap_or(Value::Null);
     if let Some(e) = f["error"].as_str() {
         return Err(format!("Ghidra: {e}"));
     }
     Ok(
         json!({"name": f["name"], "signature": f["signature"], "code": tidy(f["code"].as_str().unwrap_or("")),
-              "duration_ms": o.duration_ms, "full_analysis": s.info.size <= FULL_ANALYSIS_MAX}),
+              "duration_ms": ms, "full_analysis": s.info.size <= FULL_ANALYSIS_MAX}),
     )
 }
 
@@ -287,19 +350,10 @@ async fn radare2(
         "-e".into(),
         "scr.interactive=false".into(),
     ];
-    if s.info.format == Format::MachoFat {
-        let img = s.image.as_deref().ok_or("no image")?;
-        let (a, b) = match img.arch {
-            drishti_model::Arch::Aarch64 => ("arm", "64"),
-            drishti_model::Arch::X86_64 => ("x86", "64"),
-            drishti_model::Arch::X86 => ("x86", "32"),
-            _ => ("arm", "64"),
-        };
-        args.extend(["-a".into(), a.into(), "-b".into(), b.into()]);
-    }
     args.push("-c".into());
     args.push(format!("s {addr:#x}; af; {}", if pdg { "pdg" } else { "pdc" }).into());
-    args.push(input.as_os_str().to_owned());
+    let slice = fat_slice(&work, s)?;
+    args.push(slice.as_deref().unwrap_or(input).as_os_str().to_owned());
     let o = run(
         st,
         RunSpec {

@@ -15,6 +15,7 @@
 //! - Heavy tools (JVM / Python analysers, antivirus) run one at a time.
 //! - Results are cached on disk by (file sha-256, tool, tool version).
 
+pub mod compare;
 pub mod decompile;
 pub mod runners;
 pub mod source;

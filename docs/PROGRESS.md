@@ -168,3 +168,9 @@ Requested features (6) analysed; built the three that reuse existing infra end-t
 ## CI repair + fuzz finding (2026-11-15)
 - [x] **Fuzz finding fixed:** the weekly CI fuzz run (`disasm` target) found an ELF whose `.init_array` `sh_size` was ~2⁶⁴; the loader scanned it pointer by pointer (hung for 10+ min locally). `elf.rs` now bounds each array by the bytes in the file, uses saturating arithmetic, and caps the total at 2²⁰ pointers. Input kept as `drishti-loader/tests/fixtures/fuzz/elf-huge-init-array.bin` (regression test passes in < 1 s; without the fix it hangs).
 - [x] **CI lint failures fixed** (DECISIONS #59): toolchain pinned to 1.100.0 via `rust-toolchain.toml`, newer clippy lints fixed, workspace metadata inherited, actions bumped to checkout/setup-node v5 (Node 24).
+
+## Day 13 (2026-11-15): engine comparison backend
+- [x] `GET /binaries/{sha}/compare?sort=score|addr&offset=&limit=&only=&engines=` (DECISIONS #60): Drishti vs Ghidra vs radare2 per function — found-by, extent per engine, boundary agreement, block difference, call-set Jaccard, disagreement score 0–100; summary (found by all, boundaries agree, mean Jaccard, per-engine "only this engine found it"). Engines run in the background in the sandbox; the response says `running` until they finish.
+- [x] Live on the release server: netclient-arm64-O2 23/23 functions found by all three, 23 boundaries agree, Jaccard 1.0 (Ghidra 5.3 s, radare2 77 ms). `/bin/ls` (universal): 133/137 found by all, 131 boundaries agree, mean Jaccard 0.98; top disagreement: Ghidra splits `0x1000038e4` into two functions.
+- [x] Bug fixed: radare2 could read the wrong slice of a universal binary with two AArch64 slices (also affected the radare2 decompile view).
+- [x] Tests: 4 scoring tests (`compare.rs`: full agreement, scored disagreement, non-function call targets ignored, three-engine missing share) + radare2/Ghidra output parsers. `make check` green.

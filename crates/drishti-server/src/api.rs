@@ -1499,6 +1499,7 @@ pub async fn openapi() -> Json<Value> {
             "/api/v1/binaries/{sha}/nl-query": {"post": {"description": "{question} → function query + matches (plain-English search)"}},
             "/api/v1/ai/status": {"get": {"description": "local AI server, installed models, chosen model"}},
             "/api/v1/binaries/{sha}/ai/ask": {"post": {"description": "{question, history?, addr?} → streamed text/plain answer"}},
+            "/api/v1/binaries/{sha}/compare": {"get": {"description": "?sort=score|addr&offset=&limit=&only=engine&engines=ghidra,radare2 → Drishti vs Ghidra vs radare2 per function: boundary agreement, block difference, call-set Jaccard, disagreement score 0–100 (engines run in the background; poll until status is done)"}},
             "/api/v1/binaries/{sha}/functions/{addr}/ir": {"get": {"description": "function lifted to the Drishti IR (AArch64), on demand, byte-capped LRU"}},
             "/api/v1/binaries/{sha}/ai/claims": {"post": {"description": "{answer} → {prose, claims: [{kind, target, subject?, facts?}], checked}"}},
         }

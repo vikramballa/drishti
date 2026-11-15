@@ -4,6 +4,7 @@
 pub mod analyze;
 pub mod arch;
 pub mod cache;
+pub mod compare;
 pub mod diff;
 pub mod insights;
 pub mod lift;

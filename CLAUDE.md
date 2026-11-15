@@ -4,7 +4,7 @@ Full spec: PROJECT_SPEC.md (read the relevant section before each task).
 Progress: docs/PROGRESS.md · Daily checklist: docs/DAILY_PLAN.md · Next steps: docs/ROADMAP.md · Decisions: docs/DECISIONS.md · Architecture: docs/ARCHITECTURE.md
 
 ## Current state (2026-11-15)
-Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round (DECISIONS #32–43) + advanced search (#44–45) + agent-analysis round (#46–51: Vuln Hunter, NL query, triage, MCP tools, `drishti-ir` B1). Daily plan (docs/DAILY_PLAN.md): Days 1–12 done — v0.1.0 tag, IR shrunk (#52), 12-byte xrefs (#53), AI `<claims>` + checker with badges (#54–55), AArch64 lifter `drishti-ir/src/a64.rs` (#56; Telegram 97.99% lifted), on-demand lifting with a byte-capped cache `drishti-disasm/src/lift.rs` (#57), Unicorn differential tests in test-only `crates/drishti-difftest` (#58). Next: Day 13 (compare engine backend).
+Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round (DECISIONS #32–43) + advanced search (#44–45) + agent-analysis round (#46–51: Vuln Hunter, NL query, triage, MCP tools, `drishti-ir` B1). Daily plan (docs/DAILY_PLAN.md): Days 1–12 done — v0.1.0 tag, IR shrunk (#52), 12-byte xrefs (#53), AI `<claims>` + checker with badges (#54–55), AArch64 lifter `drishti-ir/src/a64.rs` (#56; Telegram 97.99% lifted), on-demand lifting with a byte-capped cache `drishti-disasm/src/lift.rs` (#57), Unicorn differential tests in test-only `crates/drishti-difftest` (#58), Rust pinned to 1.100 for CI (#59), engine comparison `GET /binaries/{sha}/compare` (#60). Next: Day 14 (Compare tab UI).
 
 ## Commands
 - `make check`   fmt + clippy (-D warnings) + web typecheck + all tests + schema freshness

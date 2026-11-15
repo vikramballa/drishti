@@ -163,6 +163,7 @@ pub fn router(st: Shared) -> Router {
             "/binaries/{sha}/decompile",
             get(tools::decompile::decompile),
         )
+        .route("/binaries/{sha}/compare", get(tools::compare::compare))
         .route("/binaries/{sha}/source", get(tools::source::browse))
         .route("/binaries/{sha}/lookups", get(lookup::list))
         .route("/binaries/{sha}/lookups/{id}", post(lookup::run))

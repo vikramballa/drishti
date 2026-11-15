@@ -77,8 +77,9 @@ Big-picture order and reasons: [ROADMAP.md](ROADMAP.md). Finished work: [PROGRES
   - [x] `proptest` random register/memory states through both, for every lifted instruction
   - Done when: 0 mismatches (bugs found are fixed with a regression test)
 
-- [ ] **Day 13 — Compare engine (backend)**
-  - [ ] Per function: Drishti vs Ghidra vs radare2 boundary agreement, call-set Jaccard, disagreement score
+- [x] **Day 13 — Compare engine (backend)** ✅ 2026-11-15
+  - [x] Per function: Drishti vs Ghidra vs radare2 boundary agreement, call-set Jaccard, disagreement score (`GET /binaries/{sha}/compare`)
+  - Result: netclient-arm64-O2: 23/23 found by all three, all boundaries agree, call Jaccard 1.0 (Ghidra 5.3 s, radare2 77 ms); `/bin/ls`: 133/137 by all, 131 boundaries agree, mean Jaccard 0.98, 4 functions only one engine found
   - Done when: API returns scores for a corpus binary
 
 - [ ] **Day 14 — Compare tab (UI)**
