@@ -355,3 +355,31 @@ fn elf_plt_behaviours_name_the_caller() {
         assert_eq!(entries, vec![open_conn], "{n}");
     }
 }
+
+/// The real Ubuntu build (GNU ld): its `.plt` is covered by one FDE, which
+/// must not hide the PLT stubs, or no import has a caller.
+#[test]
+fn gnu_ld_plt_stubs_are_found() {
+    let fx = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let truth = load(&fx.join("netclient-linux-x86_64-O2.bin"));
+    let img = load(&fx.join("netclient-linux-x86_64-O2.stripped.bin"));
+    let a = run(&img);
+    let socket = a
+        .functions
+        .iter()
+        .find(|f| &*f.name == "socket")
+        .expect("socket PLT stub");
+    assert!(socket.is_thunk);
+    let b = behaviors(&img, Some(&a));
+    let fns = |n: &str| -> Vec<u64> {
+        b.iter()
+            .find(|x| x.name == n)
+            .unwrap_or_else(|| panic!("{n} missing"))
+            .functions
+            .iter()
+            .map(|f| f.entry.0)
+            .collect()
+    };
+    assert!(fns("Network sockets").contains(&sym(&truth, "open_conn")));
+    assert!(fns("Spawns processes").contains(&sym(&truth, "run_helper")));
+}

@@ -328,9 +328,12 @@ pub(crate) fn load(img: &mut Image) -> Result<(), LoadError> {
         && img.endian == Endian::Little
         && let Some(d) = bytes.get(off as usize..off.saturating_add(size) as usize)
     {
+        // GNU ld emits one FDE for the whole `.plt`; as a function extent it
+        // would hide every PLT stub (calls into it look like mid-function
+        // jumps), so stub sections take no FDE ranges.
         let ranges: Vec<(u64, u64)> = crate::ehframe::fde_ranges(d, va, bits == 64)
             .into_iter()
-            .filter(|a| img.is_code(a.0))
+            .filter(|a| img.code_range(a.0).is_some_and(|c| !c.is_stub))
             .collect();
         img.function_hints.extend(ranges.iter().map(|r| r.0));
         img.function_ranges

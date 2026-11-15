@@ -15,3 +15,8 @@
   then `rust-lld -flavor gnu -pie --dynamic-linker /lib64/ld-linux-x86-64.so.2 -o elf-x86_64-plt.bin t.o libstub.so`
   (`libstub.so`: the three functions as empty stubs, linked with `-shared`).
   Not symbol-stripped: `open_conn` at 0x1380.
+- `netclient-linux-x86_64-O2.bin` / `.stripped.bin` — `corpus/src/netclient.c`
+  built by the Ubuntu CI runner exactly as the corpus tests build it
+  (Ubuntu clang 21.1.8, GNU ld: `clang -g -O2`, then `strip`), downloaded
+  from the `linux-samples` CI artifact. GNU ld writes an FDE covering the
+  whole `.plt`, which once hid every PLT stub.
