@@ -334,3 +334,24 @@ fn analysis_cache_round_trip_on_real_binaries() {
         }
     }
 }
+
+/// ELF imports are GOT slots, referenced only by the PLT stub's `jmp`: the
+/// behaviour must name the stub's caller, not the stub (this only showed on
+/// Linux CI before the fixture existed).
+#[test]
+fn elf_plt_behaviours_name_the_caller() {
+    let p =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/elf-x86_64-plt.bin");
+    let img = load(&p);
+    let a = run(&img);
+    let open_conn = sym(&img, "open_conn");
+    let b = behaviors(&img, Some(&a));
+    for n in ["Network sockets", "DNS lookups"] {
+        let x = b
+            .iter()
+            .find(|x| x.name == n)
+            .unwrap_or_else(|| panic!("{n} missing"));
+        let entries: Vec<u64> = x.functions.iter().map(|f| f.entry.0).collect();
+        assert_eq!(entries, vec![open_conn], "{n}");
+    }
+}

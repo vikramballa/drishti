@@ -175,3 +175,4 @@ Requested features (6) analysed; built the three that reuse existing infra end-t
 - [x] Bug fixed: radare2 could read the wrong slice of a universal binary with two AArch64 slices (also affected the radare2 decompile view).
 - [x] Tests: 4 scoring tests (`compare.rs`: full agreement, scored disagreement, non-function call targets ignored, three-engine missing share) + radare2/Ghidra output parsers. `make check` green.
 - [x] **Linux CI corpus failure fixed** (DECISIONS #61): glibc's `register_tm_clones` was swallowed by `frame_dummy`'s backwards tail jump; backwards jumps are now tail calls (`ANALYSIS_REV` 4). macOS CI job (incl. E2E) is green after the toolchain pin.
+- [x] **Linux CI: behaviours named PLT stubs instead of callers** (DECISIONS #62): shared `import_users` resolves thunks to their callers (also fixes the same gap in the vulnerability finder on ELF); ELF fixture test on macOS too.

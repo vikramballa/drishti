@@ -347,24 +347,9 @@ fn is_fortified(name: &str) -> bool {
     core_api(name).1
 }
 
-/// Functions that reference an import slot, mirroring `insights::behaviors`.
-fn referencing_functions(img: &Image, a: &Analysis, import_va: u64, out: &mut Vec<u64>) {
-    if import_va == 0 {
-        return;
-    }
-    for x in a.xrefs_to(import_va).iter().take(4000) {
-        if let Some(f) = a.function_containing(x.from) {
-            out.push(f.entry);
-        }
-    }
-    // `call [slot]` thunks: the stub function's callers reference the import.
-    if let Some(stub) = a.function_at(import_va) {
-        out.extend(stub.called_by.iter().copied());
-        // The stub itself (one-instruction jump to the import) is a thunk, not
-        // interesting as a sink host; its callers are what we want.
-    }
-    // Direct target in `calls` (import-slot targets are recorded there too).
-    let _ = img;
+/// Functions that reference an import (shared with `insights::behaviors`).
+fn referencing_functions(_img: &Image, a: &Analysis, import_va: u64, out: &mut Vec<u64>) {
+    crate::insights::import_users(a, import_va, 4000, out);
 }
 
 const MAX_DEPTH: u32 = 12;

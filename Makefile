@@ -25,7 +25,7 @@ lint:
 	cd web && npm run typecheck
 
 test:
-	cargo test --release
+	cargo test --release --no-fail-fast
 
 # fmt + lint + all tests + schema freshness (must be green before finishing a task)
 check: lint test schema-check difftest

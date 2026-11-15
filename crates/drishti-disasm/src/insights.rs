@@ -471,6 +471,29 @@ fn matches(import: &str, pat: &str) -> bool {
     }
 }
 
+/// Functions that use the import at `import_va` (at most `cap` references
+/// looked at). The import's address is a stub (Mach-O) or a slot (ELF GOT,
+/// PE IAT). Code that references it directly counts; a thunk that only
+/// forwards to it (a PLT stub's `jmp [slot]`, a Mach-O stub) is replaced by
+/// its callers, which are the functions that actually use the import.
+pub fn import_users(a: &Analysis, import_va: u64, cap: usize, out: &mut Vec<u64>) {
+    if import_va == 0 {
+        return;
+    }
+    for x in a.xrefs_to(import_va).iter().take(cap) {
+        if let Some(f) = a.function_containing(x.from) {
+            if f.is_thunk {
+                out.extend(f.called_by.iter().copied());
+            } else {
+                out.push(f.entry);
+            }
+        }
+    }
+    if let Some(stub) = a.function_at(import_va) {
+        out.extend(stub.called_by.iter().copied());
+    }
+}
+
 /// Evaluate behaviour rules. With an analysis, each hit lists the
 /// functions that reference the matching imports.
 pub fn behaviors(img: &Image, analysis: Option<&Analysis>) -> Vec<Behavior> {
@@ -487,17 +510,7 @@ pub fn behaviors(img: &Image, analysis: Option<&Analysis>) -> Vec<Behavior> {
         let mut entries: Vec<u64> = Vec::new();
         if let Some(a) = analysis {
             for i in &hits {
-                if i.addr.0 == 0 {
-                    continue;
-                }
-                for x in a.xrefs_to(i.addr.0).iter().take(2000) {
-                    if let Some(f) = a.function_containing(x.from) {
-                        entries.push(f.entry);
-                    }
-                }
-                if let Some(stub) = a.function_at(i.addr.0) {
-                    entries.extend(stub.called_by.iter().copied());
-                }
+                import_users(a, i.addr.0, 2000, &mut entries);
             }
             entries.sort_unstable();
             entries.dedup();
