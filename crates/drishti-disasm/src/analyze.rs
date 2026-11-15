@@ -702,8 +702,13 @@ impl<'a> Ctx<'a> {
                     Flow::Jump(t) => {
                         stop = true;
                         falls = false;
+                        // A jump back below the entry leaves the function: code
+                        // before an entry belongs to another one (glibc's
+                        // `frame_dummy` ends in `jmp register_tm_clones`, which
+                        // has no FDE to mark it).
                         if t != entry
                             && (self.is_known(t)
+                                || t < entry
                                 || outside(t)
                                 || !self.img.is_code(t)
                                 || code_range.is_some_and(|(s, e)| t < s || t >= e))

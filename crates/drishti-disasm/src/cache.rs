@@ -20,7 +20,8 @@ const MAGIC: &[u8; 8] = b"DRISHTIC";
 const FORMAT: u32 = 2;
 /// Bump when analysis output changes for identical input and options.
 /// 3 (Day 3): xrefs sorted by `(to, from, kind)`, every duplicate removed.
-pub const ANALYSIS_REV: u32 = 3;
+/// 4: an unconditional jump below the function's entry is a tail call.
+pub const ANALYSIS_REV: u32 = 4;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
