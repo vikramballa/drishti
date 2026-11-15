@@ -46,7 +46,8 @@ fn build(src: &Path, out: &Path, opt: &str, arch: &str) -> bool {
             .unwrap_or(false)
 }
 
-fn score(bin: &Path, hints: bool) -> (f64, f64) {
+/// (precision, recall, what was missed / wrongly found, for the message).
+fn score(bin: &Path, hints: bool) -> (f64, f64, String) {
     let truth_img = drishti_loader::load_image(drishti_loader::open(bin).unwrap(), None).unwrap();
     let truth: BTreeSet<u64> = truth_img
         .symbols
@@ -79,9 +80,20 @@ fn score(bin: &Path, hints: bool) -> (f64, f64) {
         .map(|f| f.entry)
         .collect();
     let tp = found.intersection(&truth).count() as f64;
+    let name = |a: &u64| {
+        let n = truth_img
+            .symbols
+            .iter()
+            .find(|s| s.addr.0 == *a)
+            .map_or("?", |s| s.name.as_str());
+        format!("{a:#x} {n}")
+    };
+    let missed: Vec<String> = truth.difference(&found).map(name).collect();
+    let extra: Vec<String> = found.difference(&truth).map(name).collect();
     (
         tp / found.len().max(1) as f64,
         tp / truth.len().max(1) as f64,
+        format!("missed {missed:?}, extra {extra:?}"),
     )
 }
 
@@ -100,6 +112,7 @@ fn corpus_function_detection() {
         &["native"]
     };
     let mut ran = 0;
+    let mut failures = Vec::new();
     for entry in std::fs::read_dir(&root).unwrap().flatten() {
         let src = entry.path();
         if src.extension().and_then(|e| e.to_str()) != Some("c") {
@@ -115,17 +128,18 @@ fn corpus_function_detection() {
                     continue;
                 }
                 for hints in [true, false] {
-                    let (p, r) = score(&out, hints);
+                    let (p, r, detail) = score(&out, hints);
                     let (min_p, min_r) = if opt == "-O0" {
                         (0.95, 0.95)
                     } else {
                         (0.85, 0.85)
                     };
-                    assert!(
-                        p >= min_p && r >= min_r,
-                        "{} hints={hints}: precision {p:.2} recall {r:.2}",
-                        out.display()
-                    );
+                    if p < min_p || r < min_r {
+                        failures.push(format!(
+                            "{} hints={hints}: precision {p:.2} recall {r:.2}; {detail}",
+                            out.display()
+                        ));
+                    }
                     ran += 1;
                 }
             }
@@ -133,4 +147,5 @@ fn corpus_function_detection() {
     }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(ran > 0, "no corpus binaries were built");
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
