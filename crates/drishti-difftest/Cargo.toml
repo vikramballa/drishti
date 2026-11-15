@@ -1,0 +1,14 @@
+[package]
+name = "drishti-difftest"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Differential tests: the AArch64 lifter + IR interpreter against Unicorn (test-only; GPL-2.0 via Unicorn, never shipped)"
+license = "GPL-2.0-only"
+
+[dependencies]
+drishti-ir = { path = "../drishti-ir" }
+unicorn-engine = "2.1.5"
+
+[dev-dependencies]
+proptest = "1"

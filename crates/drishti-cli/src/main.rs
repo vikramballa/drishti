@@ -65,6 +65,23 @@ enum Cmd {
         #[arg(long)]
         no_gap_scan: bool,
     },
+    /// Lift to the Drishti IR (AArch64): one function's IR, or `--coverage`
+    /// for the share of all instructions with full semantics.
+    Lift {
+        file: PathBuf,
+        /// Function address (hex); omit with --coverage.
+        addr: Option<String>,
+        #[arg(long)]
+        coverage: bool,
+        /// Load test: lift every function through a cache of this many MB
+        /// and report the most it ever held.
+        #[arg(long)]
+        cache_mb: Option<usize>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        arch: Option<String>,
+    },
     /// Full core analysis; writes the normalized schema JSON.
     Analyze {
         file: PathBuf,
@@ -508,6 +525,106 @@ fn main() -> Result<()> {
                         i.mnemonic,
                         i.operands,
                         c
+                    );
+                }
+            }
+        }
+        Cmd::Lift {
+            file,
+            addr,
+            coverage,
+            cache_mb,
+            json,
+            arch,
+        } => {
+            let (_blob, img) = load(&file, &arch)?;
+            let img = img.context("not a native binary")?;
+            if !drishti_disasm::lift::supported(&img) {
+                anyhow::bail!("no lifter for {:?} yet (AArch64 only)", img.arch);
+            }
+            let t = Instant::now();
+            let a = analyze(&img, &Options::default(), &|_| {}, &no_cancel)?;
+            let analysed_ms = t.elapsed().as_millis();
+            memstat::report("analysed");
+            if let Some(mb) = cache_mb {
+                let t = Instant::now();
+                let mut c: drishti_disasm::lift::LiftCache =
+                    drishti_disasm::lift::LiftCache::new(mb << 20);
+                let (mut peak, mut ops, mut over) = (0usize, 0usize, 0u64);
+                // Twice over, so the second pass is all evictions and hits.
+                for _ in 0..2 {
+                    for f in &a.functions {
+                        if let Some(l) = c.get_or_lift(f.entry, &img, &a, f.entry) {
+                            ops += l.insns.len();
+                        }
+                        peak = peak.max(c.used_bytes());
+                        if c.used_bytes() > c.cap_bytes() {
+                            over += 1;
+                        }
+                    }
+                }
+                memstat::report("lifted through cache");
+                println!(
+                    "cache cap {} MB: peak held {:.1} MB, {} functions cached at the end, {} IR ops produced, over-cap events {over}, {} ms",
+                    mb,
+                    peak as f64 / 1048576.0,
+                    c.len(),
+                    ops,
+                    t.elapsed().as_millis()
+                );
+                return Ok(());
+            }
+            if coverage {
+                let t = Instant::now();
+                let cov = drishti_disasm::lift::coverage(&img, &a).context("no lifter")?;
+                memstat::report("lifted");
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&cov)?);
+                } else {
+                    println!(
+                        "{:.2}% lifted: {} of {} instructions in {} functions (analysis {} ms, lifting {} ms)",
+                        cov.percent(),
+                        cov.lifted,
+                        cov.instructions,
+                        cov.functions,
+                        analysed_ms,
+                        t.elapsed().as_millis()
+                    );
+                    println!("unlifted by class:");
+                    for (k, v) in &cov.by_class {
+                        let ex: Vec<String> = cov
+                            .samples
+                            .get(k)
+                            .map(|s| s.iter().map(|(a, w)| format!("{w:08x}@{a:x}")).collect())
+                            .unwrap_or_default();
+                        println!(
+                            "  {k:<18} {v:>10}  {:>5.2}%  e.g. {}",
+                            100.0 * *v as f64 / cov.instructions.max(1) as f64,
+                            ex.join(" ")
+                        );
+                    }
+                    println!("most common unlifted:");
+                    for (m, n) in &cov.top_unlifted {
+                        println!("  {m:<18} {n:>10}");
+                    }
+                }
+            } else {
+                let at = addr
+                    .as_deref()
+                    .and_then(Addr::parse)
+                    .context("pass a function address or --coverage")?;
+                let entry = a.function_containing(at.0).map_or(at.0, |f| f.entry);
+                let f = drishti_disasm::lift::lift_function(&img, &a, entry)
+                    .context("no function at that address")?;
+                if json {
+                    println!("{}", serde_json::to_string(&f.insns)?);
+                } else {
+                    print!("{}", drishti_ir::render(&f.insns));
+                    eprintln!(
+                        "{} of {} instructions lifted, {} IR ops",
+                        f.lifted,
+                        f.machine,
+                        f.insns.len()
                     );
                 }
             }

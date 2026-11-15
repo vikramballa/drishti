@@ -1,5 +1,5 @@
 # Drishti task runner (spec §5 allows `make` in place of `just`).
-.PHONY: all web build release check fmt lint test schema schema-check corpus bench serve install e2e fuzz fuzz-all clean
+.PHONY: all web build release check fmt lint test schema schema-check corpus bench serve install e2e fuzz fuzz-all clean difftest
 
 BIN := target/release/drishti
 
@@ -21,13 +21,19 @@ fmt:
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --all-targets -- -D warnings
+	@if command -v cmake >/dev/null; then cargo clippy -p drishti-difftest --all-targets -- -D warnings; fi
 	cd web && npm run typecheck
 
 test:
 	cargo test --release
 
 # fmt + lint + all tests + schema freshness (must be green before finishing a task)
-check: lint test schema-check
+check: lint test schema-check difftest
+
+# AArch64 lifter vs Unicorn (test-only crate; Unicorn's C build needs cmake).
+# Longer run: DIFF_PER_GROUP=2000 PROPTEST_CASES=20000 make difftest
+difftest:
+	@if command -v cmake >/dev/null; then cargo test --release -p drishti-difftest; else echo "difftest skipped: cmake not installed"; fi
 
 schema:
 	cargo run -q --release -- schema > schema/drishti.schema.json

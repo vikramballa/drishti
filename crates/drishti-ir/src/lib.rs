@@ -10,6 +10,7 @@
 //! constants and intrinsics. See `docs/IR.md`.
 #![forbid(unsafe_code)]
 
+pub mod a64;
 mod interp;
 mod regs;
 pub use interp::{State, Step, StepError};

@@ -38,41 +38,43 @@ Big-picture order and reasons: [ROADMAP.md](ROADMAP.md). Finished work: [PROGRES
   - [x] Old free-text answers still display
   - Done when: a test shows a sample answer parsed into claims
 
-- [ ] **Day 5 — AI claim checker**
-  - [ ] Each claim checked against the call graph, imports, strings and addresses
-  - [ ] VERIFIED / REFUTED / UNVERIFIED badges in the UI; unchecked answers say "unverified"
+- [x] **Day 5 — AI claim checker** ✅ 2026-11-15
+  - [x] Each claim checked against the call graph, imports, strings and addresses
+  - [x] VERIFIED / REFUTED / UNVERIFIED badges in the UI; unchecked answers say "unverified"
   - Done when: unit tests cover a true claim, a false claim and an uncheckable claim
 
 ## Week 2 — The translator (AArch64 lifter, ROADMAP B2)
 
-- [ ] **Day 6 — Lifter: arithmetic and logic**
-  - [ ] add/sub/and/orr/eor/mov/shifts, with flags for the `s` forms
+- [x] **Day 6 — Lifter: arithmetic and logic** ✅ 2026-11-15
+  - [x] add/sub/and/orr/eor/mov/shifts, with flags for the `s` forms
   - Done when: unit tests per instruction pass
 
-- [ ] **Day 7 — Lifter: memory**
-  - [ ] ldr/str families, pre/post-index, pairs (ldp/stp)
+- [x] **Day 7 — Lifter: memory** ✅ 2026-11-15
+  - [x] ldr/str families, pre/post-index, pairs (ldp/stp)
   - Done when: unit tests pass
 
-- [ ] **Day 8 — Lifter: control flow**
-  - [ ] b/bl/br/blr/ret/cbz/tbz/b.cond; anything unknown becomes `INTRINSIC`
+- [x] **Day 8 — Lifter: control flow** ✅ 2026-11-15
+  - [x] b/bl/br/blr/ret/cbz/tbz/b.cond; anything unknown becomes `INTRINSIC`
   - Done when: unit tests pass
 
-- [ ] **Day 9 — Lifter coverage**
-  - [ ] Coverage report: % of instructions lifted (not `INTRINSIC`)
+- [x] **Day 9 — Lifter coverage** ✅ 2026-11-15
+  - [x] Coverage report: % of instructions lifted (not `INTRINSIC`) — `drishti lift F --coverage`
+  - Result: corpus arm64 -O2 100% (netclient 305/305, switches 222/222); Telegram 97.99% (15.62M of 15.94M; rest is FP/SIMD arithmetic + `brk`)
   - Done when: ≥ 95% on corpus -O2 and on Telegram
 
-- [ ] **Day 10 — Lift on demand with a memory cap**
-  - [ ] Lift per function when asked; LRU cache capped by **bytes**, not entries
+- [x] **Day 10 — Lift on demand with a memory cap** ✅ 2026-11-15
+  - [x] Lift per function when asked; LRU cache capped by **bytes**, not entries (`GET …/functions/{addr}/ir`, `DRISHTI_LIFT_CACHE_MB`, default 64)
+  - Result: Telegram `functions` heap peak 178 MB / footprint 188 MB (Day 3: 178 / 187); 64 MB cap, every function lifted twice: peak held 64.0 MB, 0 over-cap events
   - Done when: Telegram peak memory unchanged when lifting is not used; cap respected under load
 
 ## Week 3 — Prove it correct, quick wins, release
 
-- [ ] **Day 11 — Unicorn test setup**
-  - [ ] `unicorn-engine` as a **dev-dependency only** (GPL-2.0: never in the shipped binary); DECISIONS.md line
+- [x] **Day 11 — Unicorn test setup** ✅ 2026-11-15
+  - [x] `unicorn-engine` as a **dev-dependency only** (GPL-2.0: never in the shipped binary); DECISIONS.md line
   - Done when: one hand-written instruction runs the same in Unicorn and in the IR interpreter
 
-- [ ] **Day 12 — Random differential tests**
-  - [ ] `proptest` random register/memory states through both, for every lifted instruction
+- [x] **Day 12 — Random differential tests** ✅ 2026-11-15
+  - [x] `proptest` random register/memory states through both, for every lifted instruction
   - Done when: 0 mismatches (bugs found are fixed with a regression test)
 
 - [ ] **Day 13 — Compare engine (backend)**

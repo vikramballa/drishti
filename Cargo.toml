@@ -1,6 +1,16 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# Everything except `drishti-difftest`, which links Unicorn (GPL-2.0) for
+# differential tests only: `make difftest`. Never a dependency of the binary.
+default-members = [
+    "crates/drishti-cli",
+    "crates/drishti-disasm",
+    "crates/drishti-ir",
+    "crates/drishti-loader",
+    "crates/drishti-model",
+    "crates/drishti-server",
+]
 exclude = ["fuzz"]
 
 [workspace.package]

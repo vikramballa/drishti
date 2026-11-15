@@ -89,7 +89,7 @@ export interface SecretKey { id: string; label: string; env: string; get_url: st
 export interface StartupItem { file: string; label: string | null; when: string; program: string | null; args: string[]; app: string | null; run_at_load: boolean; keep_alive: boolean; disabled: boolean; signer: { kind: string; developer?: string | null; team?: string | null; notarized?: boolean }; level: string; note: string }
 export interface AppScan { name: string; path: string; exe: string | null; id: string | null; version: string | null; signer: StartupItem['signer']; level: string; note: string; access: string[]; kits: string[]; electron: boolean; login_items: number }
 /** A checkable claim from an AI answer (server `claims.rs`). */
-export interface AiClaim { kind: 'calls' | 'imports' | 'string' | 'address' | 'function'; target: string; subject?: string; facts?: number[] }
+export interface AiClaim { kind: 'calls' | 'imports' | 'string' | 'address' | 'function'; target: string; subject?: string; facts?: number[]; status?: 'verified' | 'refuted' | 'unverified'; reason?: string }
 export interface ChatTurn { role: 'user' | 'assistant'; content: string; claims?: AiClaim[] }
 
 /** Formats that contain machine code the core engine analyses. */

@@ -119,9 +119,23 @@ pub struct AppState {
     pub analysis_slots: Semaphore,
     /// sha → (path, mtime) for binaries analysed in place; watched for changes.
     pub watched: Mutex<HashMap<String, (PathBuf, i64)>>,
+    /// Lifted functions (IR), keyed by (first 8 bytes of the sha, entry);
+    /// capped by bytes of IR (`DRISHTI_LIFT_CACHE_MB`, default 64). Empty
+    /// until someone asks for a function's IR.
+    pub lift_cache: Mutex<drishti_disasm::lift::LiftCache<(u64, u64)>>,
 }
 
 pub type Shared = Arc<AppState>;
+
+/// Byte budget of [`AppState::lift_cache`].
+pub fn lift_cache_bytes() -> usize {
+    std::env::var("DRISHTI_LIFT_CACHE_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(64)
+        .clamp(1, 4096)
+        << 20
+}
 
 /// Total size of persisted analyses kept in `data/cache` (LRU by mtime).
 const CACHE_MAX_BYTES: u64 = 2 << 30;

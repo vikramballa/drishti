@@ -118,6 +118,7 @@ pub fn router(st: Shared) -> Router {
         .route("/binaries/{sha}/strings", get(strings))
         .route("/binaries/{sha}/functions", get(functions))
         .route("/binaries/{sha}/functions/{addr}", get(function_detail))
+        .route("/binaries/{sha}/functions/{addr}/ir", get(api::function_ir))
         .route("/binaries/{sha}/disasm", get(disasm))
         .route("/binaries/{sha}/xrefs", get(xrefs))
         .route("/binaries/{sha}/callgraph", get(callgraph))
@@ -317,6 +318,9 @@ pub async fn serve(cfg: Config) -> anyhow::Result<()> {
         events: tx,
         analysis_slots: tokio::sync::Semaphore::new(slots),
         watched: Mutex::new(HashMap::new()),
+        lift_cache: Mutex::new(drishti_disasm::lift::LiftCache::new(
+            state::lift_cache_bytes(),
+        )),
     });
     // Mark jobs interrupted by a previous shutdown.
     if let Ok(db) = st.db.lock() {

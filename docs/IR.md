@@ -1,8 +1,11 @@
 # Drishti IR (`drishti-ir`)
 
 Status: **B1 done** (2026-11-12) — IR types, pretty-printer and reference
-interpreter; shrunk on 2026-11-15 (Day 2) before the lifter. B2 (AArch64 / x86-64 lifters) and B3 (Unicorn differential tests)
-are next. Spec: `PROJECT_SPEC.md` §7.4.
+interpreter; shrunk on 2026-11-15 (Day 2) before the lifter. **B2 AArch64 +
+B3 done** (2026-11-15, Days 6–12): `a64.rs` lifter (97.99% of Telegram's
+instructions get full semantics), checked against Unicorn by
+`crates/drishti-difftest` (`make difftest`). x86-64 lifter not started.
+Spec: `PROJECT_SPEC.md` §7.4.
 
 The IR is a small, typed, P-code-like language. Every value has a bit width.
 It exists so analysis (SSA, dataflow, dead-flag elimination, emulation) and the
@@ -107,9 +110,11 @@ state, and require registers, flags and memory to match.
 
 ## What comes next
 
-- **B2** — AArch64 lifter first (the dev platform), then the x86-64 integer
-  subset; everything else lifts to `Intrinsic` with a warning.
-- **B3** — `proptest`-driven differential tests against Unicorn.
+- **B2** — AArch64 done (`a64.rs`; FP/SIMD arithmetic and crypto are
+  `INTRINSIC a64.<class>`). Next: the x86-64 integer subset.
+- **B3** — done for AArch64: one instruction from a random state in Unicorn
+  and in this interpreter, compare X/SP/NZCV/V, memory and next PC
+  (`crates/drishti-difftest`, DECISIONS #58).
 - **B4+** — SSA, dominators, dataflow, type recovery, structuring — all consume
   this IR. The vulnerability auditor (`drishti-disasm::vuln`) will upgrade from
   call-graph reachability to value-level taint once the lifter and dataflow land.

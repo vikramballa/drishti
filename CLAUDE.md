@@ -4,13 +4,15 @@ Full spec: PROJECT_SPEC.md (read the relevant section before each task).
 Progress: docs/PROGRESS.md · Daily checklist: docs/DAILY_PLAN.md · Next steps: docs/ROADMAP.md · Decisions: docs/DECISIONS.md · Architecture: docs/ARCHITECTURE.md
 
 ## Current state (2026-11-15)
-Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round (DECISIONS #32–43) + advanced search (#44–45) + agent-analysis round (#46–51: Vuln Hunter, NL query, triage, MCP tools, `drishti-ir` B1). Daily plan (docs/DAILY_PLAN.md): Days 1–4 done — v0.1.0 tag, IR shrunk to `Var` 16 B / `Insn` 56 B with `RegId` tables (#52), xrefs 12 B via `drishti-disasm/src/xrefs.rs` (#53, Chrome back under budget), AI answers carry `<claims>` parsed by `drishti-server/src/claims.rs` (#54). Next: Day 5 (claim checker), then the AArch64 lifter (Days 6–10).
+Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round (DECISIONS #32–43) + advanced search (#44–45) + agent-analysis round (#46–51: Vuln Hunter, NL query, triage, MCP tools, `drishti-ir` B1). Daily plan (docs/DAILY_PLAN.md): Days 1–12 done — v0.1.0 tag, IR shrunk (#52), 12-byte xrefs (#53), AI `<claims>` + checker with badges (#54–55), AArch64 lifter `drishti-ir/src/a64.rs` (#56; Telegram 97.99% lifted), on-demand lifting with a byte-capped cache `drishti-disasm/src/lift.rs` (#57), Unicorn differential tests in test-only `crates/drishti-difftest` (#58). Next: Day 13 (compare engine backend).
 
 ## Commands
 - `make check`   fmt + clippy (-D warnings) + web typecheck + all tests + schema freshness
 - `make release` build the UI and the single `drishti` binary (target/release/drishti)
 - `make corpus` / `make bench`  build test binaries / function-detection report
 - `make e2e`     Playwright journey (desktop + phone) against the release binary
+- `make difftest` lifter vs Unicorn (test-only crate, needs cmake; part of `make check`)
+- `drishti lift F [ADDR] [--coverage] [--cache-mb N]` AArch64 → IR, coverage report, cache load test
 - `make fuzz-all` all fuzz targets, FUZZ_SECONDS each (default 3600; needs nightly + cargo-fuzz)
 - `make schema`  regenerate schema/drishti.schema.json
 - `make serve`   run the server + UI on http://127.0.0.1:7878

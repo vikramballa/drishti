@@ -6,6 +6,7 @@ pub mod arch;
 pub mod cache;
 pub mod diff;
 pub mod insights;
+pub mod lift;
 pub mod nlq;
 pub mod normalize;
 pub mod render;

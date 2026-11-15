@@ -31,7 +31,9 @@ const fn r(name: &'static str, width: Width) -> RegInfo {
     RegInfo { name, width }
 }
 
-/// AArch64: x0–x30, sp, pc, the NZCV flags, v0–v31, fpcr, fpsr, tpidr_el0.
+/// AArch64: x0–x30, sp, pc, the NZCV flags, v0–v31, fpcr, fpsr, the two
+/// thread-pointer registers. Ids are fixed (the lifter indexes them
+/// directly), so new registers are only ever appended.
 const AARCH64: &[RegInfo] = &[
     r("x0", 64),
     r("x1", 64),
@@ -105,6 +107,7 @@ const AARCH64: &[RegInfo] = &[
     r("fpcr", 64),
     r("fpsr", 64),
     r("tpidr_el0", 64),
+    r("tpidrro_el0", 64),
 ];
 
 /// x86-64: the 16 general registers, rip, the arithmetic flags + DF,

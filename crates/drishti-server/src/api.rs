@@ -734,6 +734,63 @@ fn namer<'a>(
     move |a| renames.get(&a).cloned().or_else(|| s.base_name(a))
 }
 
+/// `GET /binaries/{sha}/functions/{addr}/ir` — the function lifted to the
+/// Drishti IR (AArch64), lifted on demand and kept in a byte-capped LRU.
+pub async fn function_ir(
+    State(st): State<Shared>,
+    Path((sha, addr)): Path<(String, String)>,
+) -> R<Json<Value>> {
+    let s = analysed(&st, &sha).await?;
+    let at = parse_addr(&addr)?;
+    let st2 = st.clone();
+    let out = tokio::task::spawn_blocking(move || -> R<Value> {
+        let a = s
+            .analysis
+            .as_ref()
+            .ok_or_else(|| not_found("not analysed"))?;
+        let img = s.image.as_ref().ok_or_else(|| not_found("no image"))?;
+        if !drishti_disasm::lift::supported(img) {
+            return Err(bad(format!(
+                "no IR lifter for {:?} yet (AArch64 only)",
+                img.arch
+            )));
+        }
+        let f = a
+            .function_at(at)
+            .or_else(|| a.function_containing(at))
+            .ok_or_else(|| not_found("no function at address"))?;
+        let key = (
+            u64::from_str_radix(sha.get(..16).unwrap_or("0"), 16).unwrap_or(0),
+            f.entry,
+        );
+        let (lf, used, cap) = {
+            let mut c = st2.lift_cache.lock().map_err(|e| e.to_string())?;
+            let lf = c
+                .get_or_lift(key, img, a, f.entry)
+                .ok_or_else(|| not_found("could not lift"))?;
+            (lf, c.used_bytes(), c.cap_bytes())
+        };
+        const MAX_OPS: usize = 20_000;
+        let ir: Vec<Value> = lf
+            .insns
+            .iter()
+            .take(MAX_OPS)
+            .map(|i| json!({"addr": Addr(i.addr), "op": i.op.to_string()}))
+            .collect();
+        Ok(json!({
+            "entry": Addr(lf.entry),
+            "instructions": lf.machine,
+            "lifted": lf.lifted,
+            "ops": lf.insns.len(),
+            "truncated": lf.insns.len() > MAX_OPS,
+            "ir": ir,
+            "cache": {"used_bytes": used, "cap_bytes": cap},
+        }))
+    })
+    .await??;
+    Ok(Json(out))
+}
+
 pub async fn function_detail(
     State(st): State<Shared>,
     Path((sha, addr)): Path<(String, String)>,
@@ -1442,6 +1499,7 @@ pub async fn openapi() -> Json<Value> {
             "/api/v1/binaries/{sha}/nl-query": {"post": {"description": "{question} → function query + matches (plain-English search)"}},
             "/api/v1/ai/status": {"get": {"description": "local AI server, installed models, chosen model"}},
             "/api/v1/binaries/{sha}/ai/ask": {"post": {"description": "{question, history?, addr?} → streamed text/plain answer"}},
+            "/api/v1/binaries/{sha}/functions/{addr}/ir": {"get": {"description": "function lifted to the Drishti IR (AArch64), on demand, byte-capped LRU"}},
             "/api/v1/binaries/{sha}/ai/claims": {"post": {"description": "{answer} → {prose, claims: [{kind, target, subject?, facts?}], checked}"}},
         }
     }))

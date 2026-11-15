@@ -62,6 +62,11 @@ impl State {
         self.mem.insert(addr, b);
     }
 
+    /// Every memory byte that has been written (any order).
+    pub fn written(&self) -> impl Iterator<Item = (u64, u8)> + '_ {
+        self.mem.iter().map(|(&a, &b)| (a, b))
+    }
+
     fn load_mem(&self, addr: u64, width: Width) -> u128 {
         let bytes = u32::from(width).div_ceil(8).min(16);
         let mut v: u128 = 0;

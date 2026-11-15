@@ -612,17 +612,200 @@ pub struct ClaimsReq {
 }
 
 /// `POST /binaries/{sha}/ai/claims` — split a finished answer into the prose
-/// shown to the person and the structured claims it makes (`claims.rs`).
-/// Claims are not checked yet (`checked: false`); the checker comes next.
-pub async fn claims(Path(sha): Path<String>, Json(req): Json<ClaimsReq>) -> R<Json<Value>> {
+/// shown to the person and the structured claims it makes (`claims.rs`),
+/// each checked against the file's call graph, imports, strings and
+/// addresses. If the file can't be loaded the claims come back unchecked
+/// (`checked: false`, every status `unverified`).
+pub async fn claims(
+    State(st): State<Shared>,
+    Path(sha): Path<String>,
+    Json(req): Json<ClaimsReq>,
+) -> R<Json<Value>> {
     valid_sha(&sha)?;
     if req.answer.len() > 64 << 10 {
         return Err(bad("answer is too long (64 KB max)"));
     }
     let p = crate::claims::parse(&req.answer);
+    if p.claims.is_empty() {
+        return Ok(Json(
+            json!({"prose": p.prose, "claims": [], "checked": false}),
+        ));
+    }
+    let Ok(s) = session(&st, &sha).await else {
+        let unchecked: Vec<crate::claims::Checked> = p
+            .claims
+            .into_iter()
+            .map(|claim| crate::claims::Checked {
+                claim,
+                status: crate::claims::Verdict::Unverified,
+                reason: "The file is not open, so this was not checked.".into(),
+            })
+            .collect();
+        return Ok(Json(
+            json!({"prose": p.prose, "claims": unchecked, "checked": false}),
+        ));
+    };
+    let renames = st.renames(&sha);
+    let claims = p.claims;
+    let checked = tokio::task::spawn_blocking(move || {
+        let ev = SessionEvidence::new(&s, &renames, &claims);
+        crate::claims::check(&claims, &ev)
+    })
+    .await?;
     Ok(Json(
-        json!({"prose": p.prose, "claims": p.claims, "checked": false}),
+        json!({"prose": p.prose, "claims": checked, "checked": true}),
     ))
+}
+
+/// [`crate::claims::Evidence`] over a loaded session. Function names are
+/// matched in one pass for just the names the claims mention, so checking
+/// costs one scan of the function list, not one per claim.
+struct SessionEvidence<'a> {
+    s: &'a Session,
+    renames: &'a std::collections::HashMap<u64, String>,
+    by_name: std::collections::HashMap<String, Vec<u64>>,
+}
+
+impl<'a> SessionEvidence<'a> {
+    fn new(
+        s: &'a Session,
+        renames: &'a std::collections::HashMap<u64, String>,
+        claims: &[crate::claims::Claim],
+    ) -> Self {
+        use crate::claims::norm;
+        let mut by_name: std::collections::HashMap<String, Vec<u64>> = claims
+            .iter()
+            .flat_map(|c| std::iter::once(&c.target).chain(c.subject.as_ref()))
+            .map(|n| (norm(n), Vec::new()))
+            .collect();
+        if let Some(a) = &s.analysis {
+            for f in &a.functions {
+                if let Some(v) = by_name.get_mut(&norm(&f.name)) {
+                    v.push(f.entry);
+                }
+            }
+        }
+        for (&at, n) in renames {
+            if let Some(v) = by_name.get_mut(&norm(n))
+                && !v.contains(&at)
+            {
+                v.push(at);
+            }
+        }
+        SessionEvidence {
+            s,
+            renames,
+            by_name,
+        }
+    }
+}
+
+impl crate::claims::Evidence for SessionEvidence<'_> {
+    fn has_image(&self) -> bool {
+        self.s.image.is_some()
+    }
+    fn analysed(&self) -> bool {
+        self.s.analysis.is_some()
+    }
+    fn functions_named(&self, norm: &str) -> Vec<u64> {
+        self.by_name.get(norm).cloned().unwrap_or_default()
+    }
+    fn function_at(&self, addr: u64) -> Option<(u64, String)> {
+        let a = self.s.analysis.as_ref()?;
+        let f = a
+            .function_at(addr)
+            .or_else(|| a.function_containing(addr))?;
+        let name = self
+            .renames
+            .get(&f.entry)
+            .cloned()
+            .unwrap_or_else(|| f.name.to_string());
+        Some((f.entry, name))
+    }
+    fn is_mapped(&self, addr: u64) -> bool {
+        // Reservations with no access rights (Mach-O `__PAGEZERO`) don't count.
+        self.s.image.as_ref().is_some_and(|i| {
+            i.segments
+                .iter()
+                .any(|g| g.perms != 0 && addr >= g.vaddr && addr - g.vaddr < g.vsize)
+        })
+    }
+    fn import_addrs(&self, norm: &str) -> Option<Vec<u64>> {
+        let img = self.s.image.as_ref()?;
+        let idx: Vec<u32> = img
+            .imports
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| {
+                crate::claims::norm(&i.name) == norm
+                    || crate::claims::norm(i.display_name()) == norm
+            })
+            .map(|(n, _)| n as u32)
+            .collect();
+        if idx.is_empty() {
+            return None;
+        }
+        let mut v: Vec<u64> = idx
+            .iter()
+            .filter_map(|&n| img.imports.get(n as usize))
+            .map(|i| i.addr.0)
+            .filter(|&a| a != 0)
+            .collect();
+        for (&at, n) in img.import_slots.iter().chain(img.stubs.iter()) {
+            if idx.contains(n) {
+                v.push(at);
+            }
+        }
+        v.sort_unstable();
+        v.dedup();
+        Some(v)
+    }
+    fn links_library(&self, norm: &str) -> bool {
+        let Some(img) = self.s.image.as_ref() else {
+            return false;
+        };
+        let want = norm.trim_end_matches(".framework");
+        img.libraries.iter().any(|l| {
+            let base = l.rsplit(['/', '\\']).next().unwrap_or(l);
+            let full = crate::claims::norm(base);
+            let stem = full.split('.').next().unwrap_or(&full).to_string();
+            full == want || stem == want || full.trim_end_matches(".dll") == want
+        })
+    }
+    fn calls_of(&self, entry: u64) -> Vec<u64> {
+        self.s
+            .analysis
+            .as_ref()
+            .and_then(|a| a.function_at(entry))
+            .map(|f| f.calls.to_vec())
+            .unwrap_or_default()
+    }
+    fn is_called(&self, addr: u64) -> bool {
+        self.s.analysis.as_ref().is_some_and(|a| {
+            a.xrefs_to(addr).iter().any(|x| {
+                matches!(
+                    x.kind,
+                    drishti_model::XrefKind::Call | drishti_model::XrefKind::Jump
+                )
+            })
+        })
+    }
+    fn contains_text(&self, text: &str) -> bool {
+        if self.s.strings.iter().any(|s| s.value.contains(text)) {
+            return true;
+        }
+        // Strings are extracted with a minimum length and some encodings
+        // only; fall back to the raw bytes (UTF-8, then UTF-16LE).
+        let data: &[u8] = self.s.blob.as_ref().as_ref();
+        let utf16: Vec<u8> = text.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        [text.as_bytes(), utf16.as_slice()].iter().any(|pat| {
+            let lit: String = pat.iter().map(|b| format!("\\x{b:02x}")).collect();
+            regex::bytes::RegexBuilder::new(&format!("(?-u){lit}"))
+                .unicode(false)
+                .build()
+                .is_ok_and(|re| re.is_match(data))
+        })
+    }
 }
 
 enum Route {

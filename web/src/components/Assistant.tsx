@@ -54,17 +54,32 @@ function shown(t: string): string {
 
 const KIND: Record<AiClaim['kind'], string> = { calls: 'Calls', imports: 'Imports', string: 'Text', address: 'Address', function: 'Function' };
 
-/** The concrete things an answer claims, so they can be checked. */
+const BADGE = { verified: 'Verified', refuted: 'Wrong', unverified: 'Unverified' } as const;
+
+/** The concrete things an answer claims, each checked against the file. */
 function Claims({ claims }: { claims: AiClaim[] }) {
+  const n = (st: string) => claims.filter((c) => (c.status ?? 'unverified') === st).length;
+  const bad = n('refuted');
+  const parts = [n('verified') && `${n('verified')} verified`, bad && `${bad} wrong`, n('unverified') && `${n('unverified')} unverified`].filter(Boolean).join(', ');
   return (
-    <details class="ai-claims">
-      <summary>What this answer claims ({claims.length}) · <span class="muted">not checked yet</span></summary>
-      <ul>
-        {claims.map((c) => (
-          <li><span class="claim-kind">{KIND[c.kind] ?? c.kind}</span> <code>{c.subject ? `${c.subject} → ${c.target}` : c.target}</code></li>
-        ))}
-      </ul>
-    </details>
+    <>
+      {bad > 0 && <p class="claim-warn"><b>Check this answer:</b> {bad === 1 ? 'one thing it says does' : `${bad} things it says do`} not match the file.</p>}
+      <details class="ai-claims" open={bad > 0}>
+        <summary>What this answer claims ({claims.length}) · <span class="muted">{parts}</span></summary>
+        <ul>
+          {claims.map((c) => {
+            const st = c.status ?? 'unverified';
+            return (
+              <li title={c.reason ?? 'Not checked.'}>
+                <span class={`claim-badge ${st}`}>{BADGE[st]}</span>
+                <span class="claim-kind">{KIND[c.kind] ?? c.kind}</span> <code>{c.subject ? `${c.subject} → ${c.target}` : c.target}</code>
+                {c.reason && <span class="claim-reason">{c.reason}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+    </>
   );
 }
 
@@ -257,7 +272,7 @@ export function Assistant({ sha, kind, addr, fnName, autoAsk, full, localOnly, o
         </div>
       )}
       <div class="ai-chat">
-        {turns.map((t) => (t.role === 'user' ? <div class="ai-q">{t.content}</div> : <div class="ai-a"><Prose text={t.content} cite={cite} />{t.claims?.length ? <Claims claims={t.claims} /> : null}</div>))}
+        {turns.map((t) => (t.role === 'user' ? <div class="ai-q">{t.content}</div> : <div class="ai-a"><Prose text={t.content} cite={cite} />{t.claims?.length ? <Claims claims={t.claims} /> : <p class="claim-none muted small">Unverified: this answer made no claims Drishti can check.</p>}</div>))}
         {live !== null && <div class="ai-a">{live ? <Prose text={live} cite={cite} /> : <span class="ai-thinking"><i />Reading the facts…</span>}</div>}
         <div ref={endRef} />
       </div>
