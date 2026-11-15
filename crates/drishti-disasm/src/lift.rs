@@ -63,12 +63,17 @@ fn words<'a>(img: &'a Image, f: &'a Func) -> impl Iterator<Item = (u64, u32)> + 
     f.ranges.iter().flat_map(move |&(s, e)| {
         let len = usize::try_from(e.saturating_sub(s)).unwrap_or(0);
         let bytes = img.read(s, len).unwrap_or(&[]);
-        bytes.chunks_exact(4).enumerate().map(move |(i, w)| {
-            (
-                s.wrapping_add(4 * i as u64),
-                u32::from_le_bytes([w[0], w[1], w[2], w[3]]),
-            )
-        })
+        bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+            .map(move |(i, w)| {
+                (
+                    s.wrapping_add(4 * i as u64),
+                    u32::from_le_bytes([w[0], w[1], w[2], w[3]]),
+                )
+            })
     })
 }
 

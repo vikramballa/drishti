@@ -656,7 +656,9 @@ pub fn match_text(data: &[u8], h: &RawHit) -> String {
     let m = &data[h.offset.min(end)..end];
     let wide = |be: bool| {
         let units: Vec<u16> = m
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| {
                 if be {
                     u16::from_be_bytes([p[0], p[1]])

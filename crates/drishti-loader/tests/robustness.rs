@@ -90,7 +90,8 @@ fn tiny_random_inputs() {
 
 /// Inputs that crashed or stalled the fuzzers (goblin export-trie panic on a
 /// bad re-export ordinal; stack overflow walking a hostile trie; a symbol
-/// count of ~4 billion that took 9.6 s to iterate). Kept as regression
+/// count of ~4 billion that took 9.6 s to iterate; an ELF `.init_array`
+/// whose `sh_size` was ~2^64, scanned pointer by pointer). Kept as regression
 /// tests; the files are tiny mutated corpus binaries.
 #[test]
 fn fuzz_regressions_do_not_panic_or_stall() {

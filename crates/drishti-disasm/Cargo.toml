@@ -1,7 +1,9 @@
 [package]
 name = "drishti-disasm"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 capstone = { version = "0.14.0", default-features = false, features = ["full", "std", "arch_arm", "arch_arm64", "arch_mips", "arch_riscv", "arch_powerpc", "arch_x86"] }

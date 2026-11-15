@@ -118,18 +118,18 @@ pub fn run_unicorn_probe(
     }
     uc.emu_start(PC, u64::MAX, 0, 1).map_err(e)?;
     let mut out = m.clone();
-    for n in 0..31 {
-        out.x[n] = uc.reg_read(ureg::x(n)).map_err(e)?;
+    for (n, x) in out.x.iter_mut().enumerate() {
+        *x = uc.reg_read(ureg::x(n)).map_err(e)?;
     }
     out.sp = uc.reg_read(ureg::SP).map_err(e)?;
     out.nzcv = (uc.reg_read(ureg::NZCV).map_err(e)? >> 28) as u8 & 0xf;
     out.tpidr = uc.reg_read(ureg::TPIDR_EL0).map_err(e)?;
     out.tpidrro = uc.reg_read(ureg::TPIDRRO_EL0).map_err(e)?;
-    for n in 0..32 {
+    for (n, v) in out.v.iter_mut().enumerate() {
         let b = uc.reg_read_long(ureg::Q0 + n as i32).map_err(e)?;
         let mut q = [0u8; 16];
         q.copy_from_slice(b.get(..16).ok_or("short Q register")?);
-        out.v[n] = u128::from_le_bytes(q);
+        *v = u128::from_le_bytes(q);
     }
     let next_pc = uc.reg_read(ureg::PC).map_err(e)?;
     let data = uc.mem_read_as_vec(DATA, DATA_LEN as usize).map_err(e)?;
@@ -191,15 +191,15 @@ pub fn run_ir(word: u32, m: &Machine, w: &Windows) -> Result<Outcome, String> {
         }
     }
     let mut out = m.clone();
-    for n in 0..31 {
-        out.x[n] = st.reg(id(&format!("x{n}"))) as u64;
+    for (n, x) in out.x.iter_mut().enumerate() {
+        *x = st.reg(id(&format!("x{n}"))) as u64;
     }
     out.sp = st.reg(SP) as u64;
     out.nzcv = [NF, ZF, CF, VF]
         .into_iter()
         .fold(0u8, |acc, f| (acc << 1) | (st.reg(f) & 1) as u8);
-    for n in 0..32 {
-        out.v[n] = st.reg(id(&format!("v{n}")));
+    for (n, v) in out.v.iter_mut().enumerate() {
+        *v = st.reg(id(&format!("v{n}")));
     }
     out.tpidr = st.reg(id("tpidr_el0")) as u64;
     out.tpidrro = st.reg(id("tpidrro_el0")) as u64;

@@ -148,6 +148,7 @@ name = "drishti-disasm"
 version = "0.1.0"
 dependencies = [
  "capstone",
+ "drishti-ir",
  "drishti-loader",
  "drishti-model",
  "iced-x86",
@@ -164,6 +165,13 @@ dependencies = [
  "drishti-disasm",
  "drishti-loader",
  "libfuzzer-sys",
+]
+
+[[package]]
+name = "drishti-ir"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

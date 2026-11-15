@@ -30,7 +30,7 @@ pub fn fingerprint(img: &Image, f: &Func) -> u64 {
         };
         match img.arch {
             Arch::Aarch64 => {
-                for w in bytes.chunks_exact(4) {
+                for w in bytes.as_chunks::<4>().0 {
                     let i = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
                     // Mask PC-relative immediates: B/BL, B.cond/CBZ, TBZ, ADR/ADRP, LDR literal.
                     let m = if i & 0x7c00_0000 == 0x1400_0000 {
@@ -327,7 +327,7 @@ fn instruction_features(img: &Image, f: &Func, out: &mut Vec<u64>) {
         };
         match img.arch {
             Arch::Aarch64 => {
-                for w in bytes.chunks_exact(4) {
+                for w in bytes.as_chunks::<4>().0 {
                     let i = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
                     a64_features(img, i, out);
                 }

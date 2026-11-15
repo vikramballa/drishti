@@ -1,0 +1,6 @@
+# One Rust version for local `make check` and CI, so new clippy lints arrive
+# by a deliberate bump, not by a runner update. The weekly fuzz job uses
+# `cargo +nightly` explicitly.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]

@@ -71,7 +71,7 @@ pub fn lift(word: u32, pc: u64, out: &mut Vec<Insn>) -> Lifted {
 pub fn lift_bytes(bytes: &[u8], pc: u64) -> (Vec<Insn>, usize, usize) {
     let mut out = Vec::with_capacity(bytes.len());
     let (mut ok, mut n) = (0, 0);
-    for (i, w) in bytes.chunks_exact(4).enumerate() {
+    for (i, w) in bytes.as_chunks::<4>().0.iter().enumerate() {
         let word = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
         n += 1;
         if lift(word, pc.wrapping_add(4 * i as u64), &mut out) == Lifted::Ok {

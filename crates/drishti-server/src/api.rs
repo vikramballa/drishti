@@ -718,10 +718,10 @@ pub async fn functions(
         .collect();
     match q.sort.as_deref() {
         Some("name") => rows.sort_by(|a, b| a.name.cmp(&b.name)),
-        Some("size") => rows.sort_by(|a, b| b.size.cmp(&a.size)),
-        Some("blocks") => rows.sort_by(|a, b| b.blocks.cmp(&a.blocks)),
-        Some("callers") => rows.sort_by(|a, b| b.callers.cmp(&a.callers)),
-        Some("complexity") => rows.sort_by(|a, b| b.cyclomatic.cmp(&a.cyclomatic)),
+        Some("size") => rows.sort_by_key(|r| std::cmp::Reverse(r.size)),
+        Some("blocks") => rows.sort_by_key(|r| std::cmp::Reverse(r.blocks)),
+        Some("callers") => rows.sort_by_key(|r| std::cmp::Reverse(r.callers)),
+        Some("complexity") => rows.sort_by_key(|r| std::cmp::Reverse(r.cyclomatic)),
         _ => {}
     }
     Ok(Json(page(rows, &q)))

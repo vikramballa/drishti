@@ -353,10 +353,11 @@ pub fn locate(t: &ToolDef) -> Option<PathBuf> {
 /// JDK for Ghidra/JADX: JAVA_HOME, then Homebrew's openjdk (Ghidra 12 needs 25+).
 pub fn java_home() -> Option<PathBuf> {
     let ok = |p: PathBuf| p.join("bin/java").is_file().then_some(p);
-    for k in ["DRISHTI_JAVA_HOME"] {
-        if let Some(p) = std::env::var_os(k).map(PathBuf::from).and_then(ok) {
-            return Some(p);
-        }
+    if let Some(p) = std::env::var_os("DRISHTI_JAVA_HOME")
+        .map(PathBuf::from)
+        .and_then(ok)
+    {
+        return Some(p);
     }
     for p in [
         "/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home",

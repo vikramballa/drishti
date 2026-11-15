@@ -1,8 +1,10 @@
 [package]
 name = "drishti-cli"
 description = "Drishti command-line interface"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true

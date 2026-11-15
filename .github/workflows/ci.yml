@@ -12,10 +12,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with: { components: "rustfmt, clippy" }
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      # The version (and rustfmt/clippy) come from rust-toolchain.toml.
+      - run: rustup toolchain install && rustc --version
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: make web
       - run: make check
@@ -34,9 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo install cargo-fuzz --locked
+      - run: cargo +nightly install cargo-fuzz --locked
       - run: make fuzz-all
       - if: failure()
         uses: actions/upload-artifact@v4
@@ -44,6 +44,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
       - run: cargo install cargo-audit && cargo audit
       - run: cd web && npm ci && npm audit --omit=dev

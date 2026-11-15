@@ -9,6 +9,10 @@ use drishti_model::{
 use goblin::elf::{Elf, header, program_header, section_header, sym};
 use std::collections::HashMap;
 
+/// Most init/fini-array pointers read from one file (a real binary has a
+/// few thousand at most).
+const MAX_INIT_POINTERS: u64 = 1 << 20;
+
 pub(crate) fn load(img: &mut Image) -> Result<(), LoadError> {
     let blob = img.blob.clone();
     let bytes: &[u8] = blob
@@ -136,7 +140,9 @@ pub(crate) fn load(img: &mut Image) -> Result<(), LoadError> {
             && (sh.sh_type == section_header::SHT_INIT_ARRAY
                 || sh.sh_type == section_header::SHT_FINI_ARRAY)
         {
-            init_arrays.push((vaddr, sh.sh_size));
+            // `sh_size` is untrusted: never scan more than the file holds.
+            let in_file = (bytes.len() as u64).saturating_sub(sh.sh_offset);
+            init_arrays.push((vaddr, file_size.min(in_file)));
         }
         if name == ".comment"
             && let Some(c) =
@@ -262,7 +268,11 @@ pub(crate) fn load(img: &mut Image) -> Result<(), LoadError> {
         .iter()
         .chain(elf.dynrelas.iter())
         .chain(elf.dynrels.iter());
-    let in_init = |off: u64| init_arrays.iter().any(|&(a, sz)| off >= a && off < a + sz);
+    let in_init = |off: u64| {
+        init_arrays
+            .iter()
+            .any(|&(a, sz)| off >= a && off < a.saturating_add(sz))
+    };
     for r in relocs {
         if let Some(&idx) = import_index.get(&r.r_sym) {
             img.import_slots.insert(r.r_offset, idx);
@@ -296,18 +306,22 @@ pub(crate) fn load(img: &mut Image) -> Result<(), LoadError> {
     }
     drop(elf);
 
-    // init/fini array pointers stored in-file (non-PIE).
+    // init/fini array pointers stored in-file (non-PIE). Sizes are already
+    // bounded by the file; the total is capped too (many overlapping
+    // sections could each claim the whole file).
+    let step = u64::from(bits / 8);
+    let mut budget: u64 = MAX_INIT_POINTERS;
     for (a, sz) in init_arrays {
-        let step = u64::from(bits / 8);
-        let mut p = a;
-        while p + step <= a + sz {
+        let n = (sz / step).min(budget);
+        budget -= n;
+        for k in 0..n {
+            let p = a.saturating_add(k * step);
             if let Some(v) = img.read_ptr(p)
                 && v != 0
                 && v != u64::MAX
             {
                 img.function_hints.push(v & thumb_mask);
             }
-            p += step;
         }
     }
     if let Some((va, off, size)) = eh_frame

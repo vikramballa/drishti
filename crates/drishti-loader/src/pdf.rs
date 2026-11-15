@@ -422,13 +422,17 @@ impl<'a> Parser<'a> {
 fn decode_text(b: &[u8]) -> String {
     let s = if let Some(r) = b.strip_prefix(&[0xfe, 0xff]) {
         let u: Vec<u16> = r
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_be_bytes([c[0], c[1]]))
             .collect();
         String::from_utf16_lossy(&u)
     } else if let Some(r) = b.strip_prefix(&[0xff, 0xfe]) {
         let u: Vec<u16> = r
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         String::from_utf16_lossy(&u)
@@ -833,7 +837,9 @@ fn der_attr(b: &[u8], oid: &[u8], s: usize, e: usize) -> Option<String> {
         0x0c | 0x13 | 0x16 | 0x14 => String::from_utf8_lossy(v).into_owned(),
         0x1e => {
             let u: Vec<u16> = v
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_be_bytes([c[0], c[1]]))
                 .collect();
             String::from_utf16_lossy(&u)
@@ -2370,7 +2376,7 @@ pub fn analyze(b: &[u8]) -> DocumentReport {
             explanation: "A script is set to run automatically, without you clicking anything. This is the pattern most malicious PDFs use.".into(),
         });
     }
-    r.features.sort_by(|a, b| b.severity.cmp(&a.severity));
+    r.features.sort_by_key(|f| std::cmp::Reverse(f.severity));
     r.risk = r
         .features
         .iter()
