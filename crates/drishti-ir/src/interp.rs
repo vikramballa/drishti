@@ -1,13 +1,15 @@
 //! Reference interpreter for the IR (spec §7.4). It is the oracle the lifter's
 //! differential tests (B3) compare against: deterministic, no host state.
 
-use crate::{BinOp, Insn, Op, UnOp, Var, Width, mask, sign_extend};
+use crate::{BinOp, Insn, Op, Place, RegId, UnOp, Var, Width, mask, sign_extend};
 use std::collections::HashMap;
 
-/// Machine state: registers/flags by name, byte-addressed little-endian memory.
+/// Machine state: registers/flags by id, temporaries, byte-addressed
+/// little-endian memory. Anything never written reads as zero.
 #[derive(Debug, Default, Clone)]
 pub struct State {
-    regs: HashMap<String, u128>,
+    regs: HashMap<RegId, u128>,
+    temps: HashMap<u32, u128>,
     mem: HashMap<u64, u8>,
 }
 
@@ -30,9 +32,8 @@ pub enum Step {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepError {
-    /// A Store/Load used a destination that is not a memory cell, or a width
-    /// mismatch the interpreter cannot honour.
-    BadForm(String),
+    /// A destination register id that no register table knows.
+    UnknownReg(RegId),
 }
 
 impl State {
@@ -40,12 +41,17 @@ impl State {
         State::default()
     }
 
-    pub fn set_reg(&mut self, name: &str, value: u128, width: Width) {
-        self.regs.insert(name.to_string(), mask(value, width));
+    /// Set a whole register (masked to its table width).
+    pub fn set_reg(&mut self, id: RegId, value: u128) {
+        self.regs.insert(id, mask(value, id.width()));
     }
 
-    pub fn reg(&self, name: &str) -> u128 {
-        self.regs.get(name).copied().unwrap_or(0)
+    pub fn reg(&self, id: RegId) -> u128 {
+        self.regs.get(&id).copied().unwrap_or(0)
+    }
+
+    pub fn temp(&self, id: u32) -> u128 {
+        self.temps.get(&id).copied().unwrap_or(0)
     }
 
     pub fn load_byte(&self, addr: u64) -> u8 {
@@ -57,45 +63,41 @@ impl State {
     }
 
     fn load_mem(&self, addr: u64, width: Width) -> u128 {
-        let bytes = (width as u32).div_ceil(8);
+        let bytes = u32::from(width).div_ceil(8).min(16);
         let mut v: u128 = 0;
         for i in 0..bytes {
-            v |= (self.load_byte(addr.wrapping_add(i as u64)) as u128) << (8 * i);
+            v |= u128::from(self.load_byte(addr.wrapping_add(u64::from(i)))) << (8 * i);
         }
         mask(v, width)
     }
 
     fn store_mem(&mut self, addr: u64, value: u128, width: Width) {
-        let bytes = (width as u32).div_ceil(8);
+        let bytes = u32::from(width).div_ceil(8).min(16);
         for i in 0..bytes {
-            self.store_byte(addr.wrapping_add(i as u64), (value >> (8 * i)) as u8);
+            self.store_byte(addr.wrapping_add(u64::from(i)), (value >> (8 * i)) as u8);
         }
     }
 
     /// Evaluate a varnode to its (unsigned, masked) value.
     pub fn eval(&self, v: &Var) -> u128 {
         match v {
-            Var::Const { value, width } => mask(*value, *width),
-            Var::Reg { name, width } => mask(self.reg(name), *width),
-            Var::Temp { id, width } => mask(self.reg(&temp_key(*id)), *width),
-            Var::Mem { addr, width } => {
-                let a = self.eval(addr) as u64;
-                self.load_mem(a, *width)
-            }
+            Var::Const { value, width } => mask(u128::from(*value), *width),
+            Var::Wide { value, width } => mask(**value, *width),
+            Var::Reg { id, width } => mask(self.reg(*id), *width),
+            Var::Temp { id, width } => mask(self.temp(*id), *width),
         }
     }
 
-    /// Assign `value` to a destination varnode.
-    fn assign(&mut self, dst: &Var, value: u128) -> Result<(), StepError> {
+    /// Assign `value` to a destination. A register narrower than its table
+    /// width is written zero-extended (see [`Place::Reg`]).
+    fn assign(&mut self, dst: Place, value: u128) -> Result<(), StepError> {
         match dst {
-            Var::Reg { name, width } => self.set_reg(name, value, *width),
-            Var::Temp { id, width } => self.set_reg(&temp_key(*id), value, *width),
-            Var::Mem { addr, width } => {
-                let a = self.eval(addr) as u64;
-                self.store_mem(a, value, *width);
+            Place::Reg { id, width } => {
+                let full = id.info().ok_or(StepError::UnknownReg(id))?.width;
+                self.regs.insert(id, mask(mask(value, width), full));
             }
-            Var::Const { .. } => {
-                return Err(StepError::BadForm("cannot assign to a constant".into()));
+            Place::Temp { id, width } => {
+                self.temps.insert(id, mask(value, width));
             }
         }
         Ok(())
@@ -106,13 +108,13 @@ impl State {
         match &insn.op {
             Op::Copy { dst, a } => {
                 let v = self.eval(a);
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Load { dst, addr } => {
                 let a = self.eval(addr) as u64;
                 let v = self.load_mem(a, dst.width());
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Store { addr, a } => {
@@ -123,7 +125,7 @@ impl State {
             }
             Op::Bin { dst, op, a, b } => {
                 let v = self.bin(*op, a, b, dst.width());
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Un { dst, op, a } => {
@@ -134,35 +136,38 @@ impl State {
                     UnOp::Not => mask(!x, w),
                     UnOp::Popcount => (x & lowmask(a.width())).count_ones() as u128,
                 };
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Zext { dst, a } => {
                 let v = mask(self.eval(a), dst.width());
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Sext { dst, a } => {
                 let s = sign_extend(self.eval(a), a.width());
-                self.assign(dst, mask(s as u128, dst.width()))?;
+                self.assign(*dst, mask(s as u128, dst.width()))?;
                 Ok(Step::Next)
             }
             Op::Trunc { dst, a } => {
                 let v = mask(self.eval(a), dst.width());
-                self.assign(dst, v)?;
+                self.assign(*dst, v)?;
                 Ok(Step::Next)
             }
             Op::Concat { dst, hi, lo } => {
-                let lo_w = lo.width();
-                let v = (self.eval(hi) << lo_w) | self.eval(lo);
-                self.assign(dst, mask(v, dst.width()))?;
+                let v = self
+                    .eval(hi)
+                    .checked_shl(u32::from(lo.width()))
+                    .unwrap_or(0)
+                    | self.eval(lo);
+                self.assign(*dst, mask(v, dst.width()))?;
                 Ok(Step::Next)
             }
             Op::Extract { dst, a, lo, hi } => {
                 let x = self.eval(a);
                 let w = hi.saturating_sub(*lo);
-                let v = mask(x >> *lo, w);
-                self.assign(dst, mask(v, dst.width()))?;
+                let v = mask(x.checked_shr(u32::from(*lo)).unwrap_or(0), w);
+                self.assign(*dst, mask(v, dst.width()))?;
                 Ok(Step::Next)
             }
             Op::Branch { target } => Ok(Step::Branch(*target)),
@@ -177,14 +182,11 @@ impl State {
             Op::Call { target } => Ok(Step::Call(*target)),
             Op::CallInd { target } => Ok(Step::Indirect(self.eval(target) as u64)),
             Op::Return => Ok(Step::Return),
-            Op::Intrinsic { out, .. } => {
-                // Unknown semantics: leave the output undefined (unchanged).
-                let _ = out;
-                Ok(Step::Next)
-            }
+            // Unknown semantics: the output is left unchanged.
+            Op::Intrinsic(_) => Ok(Step::Next),
             Op::Undef { dst } => {
                 // Undefined value; model as zero to stay deterministic.
-                self.assign(dst, 0)?;
+                self.assign(*dst, 0)?;
                 Ok(Step::Next)
             }
         }
@@ -195,6 +197,8 @@ impl State {
         let y = self.eval(b);
         let xs = sign_extend(x, a.width());
         let ys = sign_extend(y, b.width());
+        // Shift amounts beyond u32 must not wrap to a small shift.
+        let sh = u32::try_from(y).unwrap_or(u32::MAX);
         use BinOp::*;
         match op {
             Add => mask(x.wrapping_add(y), w),
@@ -207,13 +211,10 @@ impl State {
             And => mask(x & y, w),
             Or => mask(x | y, w),
             Xor => mask(x ^ y, w),
-            Shl => mask(x.checked_shl(y as u32).unwrap_or(0), w),
-            Lshr => mask(
-                (x & lowmask(a.width())).checked_shr(y as u32).unwrap_or(0),
-                w,
-            ),
+            Shl => mask(x.checked_shl(sh).unwrap_or(0), w),
+            Lshr => mask((x & lowmask(a.width())).checked_shr(sh).unwrap_or(0), w),
             Ashr => {
-                let sh = (y as u32).min(a.width().saturating_sub(1) as u32);
+                let sh = sh.min(u32::from(a.width().saturating_sub(1)));
                 mask((xs >> sh) as u128, w)
             }
             Eq => (x == y) as u128,
@@ -242,10 +243,6 @@ impl State {
     }
 }
 
-fn temp_key(id: u32) -> String {
-    format!("$t{id}")
-}
-
 fn lowmask(w: Width) -> u128 {
     if w == 0 || w >= 128 {
         u128::MAX
@@ -257,134 +254,216 @@ fn lowmask(w: Width) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Op;
+    use crate::{Arch, Op};
+
+    fn x86(name: &str) -> RegId {
+        Arch::X86_64.reg(name).expect("x86-64 register")
+    }
 
     fn run(st: &mut State, ops: Vec<Op>) {
         for (i, op) in ops.into_iter().enumerate() {
-            st.exec(&Insn::new(i as u64, op)).unwrap();
+            st.exec(&Insn::new(i as u64, op)).expect("exec");
         }
     }
 
     #[test]
     fn add_and_flags() {
+        let (rax, rbx, cf) = (x86("rax"), x86("rbx"), x86("CF"));
         let mut st = State::new();
-        st.set_reg("rax", 0xffff_ffff_ffff_ffff, 64);
-        st.set_reg("rbx", 1, 64);
+        st.set_reg(rax, 0xffff_ffff_ffff_ffff);
+        st.set_reg(rbx, 1);
         run(
             &mut st,
             vec![
                 Op::Bin {
-                    dst: Var::reg("CF", 1),
+                    dst: Place::reg(cf),
                     op: BinOp::Carry,
-                    a: Var::reg("rax", 64),
-                    b: Var::reg("rbx", 64),
+                    a: Var::reg(rax),
+                    b: Var::reg(rbx),
                 },
                 Op::Bin {
-                    dst: Var::reg("rax", 64),
+                    dst: Place::reg(rax),
                     op: BinOp::Add,
-                    a: Var::reg("rax", 64),
-                    b: Var::reg("rbx", 64),
+                    a: Var::reg(rax),
+                    b: Var::reg(rbx),
                 },
             ],
         );
-        assert_eq!(st.reg("rax"), 0, "wrapped to zero");
-        assert_eq!(st.reg("CF"), 1, "carry set");
+        assert_eq!(st.reg(rax), 0, "wrapped to zero");
+        assert_eq!(st.reg(cf), 1, "carry set");
     }
 
     #[test]
     fn signed_overflow() {
+        let (rax, of) = (x86("rax"), x86("OF"));
         let mut st = State::new();
-        // 0x7fff_ffff + 1 overflows signed 32-bit → OF = 1.
-        st.set_reg("eax", 0x7fff_ffff, 32);
+        // eax = 0x7fff_ffff; eax + 1 overflows signed 32-bit → OF = 1.
+        st.set_reg(rax, 0x7fff_ffff);
         st.exec(&Insn::new(
             0,
             Op::Bin {
-                dst: Var::reg("OF", 1),
+                dst: Place::reg(of),
                 op: BinOp::Scarry,
-                a: Var::reg("eax", 32),
+                a: Var::reg_w(rax, 32),
                 b: Var::con(1, 32),
             },
         ))
-        .unwrap();
-        assert_eq!(st.reg("OF"), 1);
+        .expect("exec");
+        assert_eq!(st.reg(of), 1);
     }
 
     #[test]
     fn load_store_roundtrip() {
+        let (rdi, rax) = (x86("rdi"), x86("rax"));
         let mut st = State::new();
-        st.set_reg("rdi", 0x4000, 64);
+        st.set_reg(rdi, 0x4000);
+        st.set_reg(rax, u128::MAX);
         // *rdi = 0xdeadbeef (32-bit), then read it back into eax.
-        st.exec(&Insn::new(
-            0,
-            Op::Store {
-                addr: Var::reg("rdi", 64),
-                a: Var::con(0xdead_beef, 32),
-            },
-        ))
-        .unwrap();
-        st.exec(&Insn::new(
-            1,
-            Op::Load {
-                dst: Var::reg("eax", 32),
-                addr: Var::reg("rdi", 64),
-            },
-        ))
-        .unwrap();
-        assert_eq!(st.reg("eax"), 0xdead_beef);
+        run(
+            &mut st,
+            vec![
+                Op::Store {
+                    addr: Var::reg(rdi),
+                    a: Var::con(0xdead_beef, 32),
+                },
+                Op::Load {
+                    dst: Place::reg_w(rax, 32),
+                    addr: Var::reg(rdi),
+                },
+            ],
+        );
+        // A 32-bit write zero-extends into rax.
+        assert_eq!(st.reg(rax), 0xdead_beef);
         // Little-endian: low byte at 0x4000.
         assert_eq!(st.load_byte(0x4000), 0xef);
     }
 
     #[test]
     fn concat_extract() {
+        let rax = x86("rax");
         let mut st = State::new();
-        st.exec(&Insn::new(
-            0,
-            Op::Concat {
-                dst: Var::reg("rax", 64),
-                hi: Var::con(0x1122_3344, 32),
-                lo: Var::con(0x5566_7788, 32),
-            },
-        ))
-        .unwrap();
-        assert_eq!(st.reg("rax"), 0x1122_3344_5566_7788);
-        st.exec(&Insn::new(
-            1,
-            Op::Extract {
-                dst: Var::reg("ax", 16),
-                a: Var::reg("rax", 64),
-                lo: 0,
-                hi: 16,
-            },
-        ))
-        .unwrap();
-        assert_eq!(st.reg("ax"), 0x7788);
+        run(
+            &mut st,
+            vec![
+                Op::Concat {
+                    dst: Place::reg(rax),
+                    hi: Var::con(0x1122_3344, 32),
+                    lo: Var::con(0x5566_7788, 32),
+                },
+                Op::Extract {
+                    dst: Place::temp(0, 16),
+                    a: Var::reg(rax),
+                    lo: 0,
+                    hi: 16,
+                },
+            ],
+        );
+        assert_eq!(st.reg(rax), 0x1122_3344_5566_7788);
+        assert_eq!(st.temp(0), 0x7788);
     }
 
     #[test]
     fn conditional_branch() {
+        let zf = x86("ZF");
+        let br = Insn::new(
+            0,
+            Op::CBranch {
+                cond: Var::reg(zf),
+                target: 0x2000,
+            },
+        );
         let mut st = State::new();
-        st.set_reg("ZF", 1, 1);
-        let s = st
-            .exec(&Insn::new(
+        st.set_reg(zf, 1);
+        assert_eq!(st.exec(&br), Ok(Step::Branch(0x2000)));
+        st.set_reg(zf, 0);
+        assert_eq!(st.exec(&br), Ok(Step::NotTaken));
+    }
+
+    #[test]
+    fn wide_constants_and_vectors() {
+        let v0 = Arch::Aarch64.reg("v0").expect("v0");
+        let sp = Arch::Aarch64.reg("sp").expect("sp");
+        let big = 0x0123_4567_89ab_cdef_fedc_ba98_7654_3210u128;
+        let mut st = State::new();
+        st.set_reg(sp, 0x8000);
+        run(
+            &mut st,
+            vec![
+                Op::Copy {
+                    dst: Place::reg(v0),
+                    a: Var::con(big, 128),
+                },
+                Op::Store {
+                    addr: Var::reg(sp),
+                    a: Var::reg(v0),
+                },
+                Op::Load {
+                    dst: Place::temp(1, 128),
+                    addr: Var::reg(sp),
+                },
+            ],
+        );
+        assert_eq!(st.reg(v0), big);
+        assert_eq!(st.temp(1), big);
+        assert_eq!(st.load_byte(0x800f), 0x01);
+    }
+
+    #[test]
+    fn huge_shift_amounts_do_not_wrap() {
+        let rax = x86("rax");
+        let mut st = State::new();
+        // A shift by 2^32 + 1 must not act like a shift by 1.
+        for op in [BinOp::Shl, BinOp::Lshr] {
+            st.exec(&Insn::new(
                 0,
-                Op::CBranch {
-                    cond: Var::reg("ZF", 1),
-                    target: 0x2000,
+                Op::Bin {
+                    dst: Place::reg(rax),
+                    op,
+                    a: Var::con(0x10, 64),
+                    b: Var::con((1 << 32) + 1, 64),
                 },
             ))
-            .unwrap();
-        assert_eq!(s, Step::Branch(0x2000));
-        st.set_reg("ZF", 0, 1);
-        let s = st
-            .exec(&Insn::new(
+            .expect("exec");
+            assert_eq!(st.reg(rax), 0, "{op:?}");
+        }
+        st.exec(&Insn::new(
+            0,
+            Op::Bin {
+                dst: Place::reg(rax),
+                op: BinOp::Ashr,
+                a: Var::con(0x8000_0000_0000_0000, 64),
+                b: Var::con((1 << 32) + 1, 64),
+            },
+        ))
+        .expect("exec");
+        assert_eq!(st.reg(rax), u128::from(u64::MAX), "sign fill");
+        // Concat/Extract at the 128-bit edge must not overflow.
+        st.exec(&Insn::new(
+            0,
+            Op::Extract {
+                dst: Place::temp(2, 8),
+                a: Var::con(u128::MAX, 128),
+                lo: 200,
+                hi: 208,
+            },
+        ))
+        .expect("exec");
+        assert_eq!(st.temp(2), 0);
+    }
+
+    #[test]
+    fn unknown_register_is_an_error() {
+        let mut st = State::new();
+        let bad = RegId(0xff00);
+        assert_eq!(
+            st.exec(&Insn::new(
                 0,
-                Op::CBranch {
-                    cond: Var::reg("ZF", 1),
-                    target: 0x2000,
+                Op::Copy {
+                    dst: Place::Reg { id: bad, width: 64 },
+                    a: Var::con(1, 64),
                 },
-            ))
-            .unwrap();
-        assert_eq!(s, Step::NotTaken);
+            )),
+            Err(StepError::UnknownReg(bad))
+        );
     }
 }

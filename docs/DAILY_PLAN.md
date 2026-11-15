@@ -19,22 +19,23 @@ Big-picture order and reasons: [ROADMAP.md](ROADMAP.md). Finished work: [PROGRES
   - [x] Tag `v0.1.0`
   - Done when: `git log` shows the commit, the tag exists, and PROGRESS.md has a real fuzz result
 
-- [ ] **Day 2 — Shrink the IR (before writing the lifter)**
-  - [ ] Registers become `u16` ids from a per-architecture table (no `String`)
-  - [ ] Constants become `u64` (rare wide variant for anything bigger)
-  - [ ] Remove `Var::Mem` (`Load`/`Store` already cover memory)
-  - [ ] Add a size test: `Var` ≤ 16 B, `Insn` ≤ 56 B
-  - [ ] Update `docs/IR.md`
+- [x] **Day 2 — Shrink the IR (before writing the lifter)** ✅ 2026-11-15
+  - [x] Registers become `u16` ids from a per-architecture table (no `String`)
+  - [x] Constants become `u64` (rare wide variant for anything bigger)
+  - [x] Remove `Var::Mem` (`Load`/`Store` already cover memory); destinations are a typed `Place`
+  - [x] Add a size test: `Var` ≤ 16 B, `Insn` ≤ 56 B (now exactly 16 B / 56 B)
+  - [x] Update `docs/IR.md`
   - Done when: size test passes and all IR interpreter tests pass (today: Var 32 B, Insn 128 B + heap)
 
-- [ ] **Day 3 — Smaller xrefs**
-  - [ ] `XrefC` stores `u32` offsets from the image's lowest address + `u8` kind, with a fallback for images spanning more than 4 GiB
-  - [ ] Bump `ANALYSIS_REV` (cache format changes)
+- [x] **Day 3 — Smaller xrefs** ✅ 2026-11-15
+  - [x] `XrefC` stores `u32` offsets from the image's lowest address + `u8` kind, with a fallback for images spanning more than 4 GiB
+  - [x] Bump `ANALYSIS_REV` (cache format changes) → rev 3, cache format 2
+  - Result: byte-identical on 45 corpus files + Telegram + Chrome; Chrome peak heap 589 → 434 MB, peak footprint 488 → 419 MB (now under the 450 MB budget); Telegram 224 → 178 MB heap
   - Done when: output is byte-identical on corpus, Telegram and Chrome, and Chrome peak memory is measured and written down
 
-- [ ] **Day 4 — AI gives checkable claims**
-  - [ ] AI answers carry structured claims (kind: calls / imports / string / address / function, plus the cited thing)
-  - [ ] Old free-text answers still display
+- [x] **Day 4 — AI gives checkable claims** ✅ 2026-11-15
+  - [x] AI answers carry structured claims (kind: calls / imports / string / address / function, plus the cited thing)
+  - [x] Old free-text answers still display
   - Done when: a test shows a sample answer parsed into claims
 
 - [ ] **Day 5 — AI claim checker**

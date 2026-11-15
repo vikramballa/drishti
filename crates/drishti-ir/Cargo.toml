@@ -6,3 +6,6 @@ description = "Drishti intermediate representation (P-code-like, typed, bit-widt
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }

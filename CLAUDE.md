@@ -3,8 +3,8 @@
 Full spec: PROJECT_SPEC.md (read the relevant section before each task).
 Progress: docs/PROGRESS.md · Daily checklist: docs/DAILY_PLAN.md · Next steps: docs/ROADMAP.md · Decisions: docs/DECISIONS.md · Architecture: docs/ARCHITECTURE.md
 
-## Current state (2026-11-12)
-Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round: sandboxed external tools (Ghidra, radare2, capa, FLOSS, YARA, ClamAV, ExifTool, oletools, binwalk, JADX, ILSpy, WABT, ipsw), cloud AI with user keys, opt-in online lookups, plain-language verdict/permissions/SDK report, My Mac checks, Simple/Expert UI redesign (DECISIONS #32–43) + advanced search (DECISIONS #44–45) + agent-analysis round (DECISIONS #46–51): static Vuln Hunter (`drishti-disasm/src/vuln.rs`, call-graph input→sink reachability, analysis-only), plain-English function search (`nlq.rs`), triage briefing, 3 new MCP tools (`triage`/`find_vulns`/`nl_query`), `/vulns` + `/nl-query` API, Weak-spots UI, and the `drishti-ir` crate (milestone B1: typed IR + interpreter, `docs/IR.md`). Next: ROADMAP.md milestone B2 (AArch64 lifter) → B3 (Unicorn diff tests) → decompiler; then value-level taint to upgrade the Vuln Hunter.
+## Current state (2026-11-15)
+Phases 0–2 done + insights round + ROADMAP milestone A + plain-language round (DECISIONS #29–31) + tools/UX round (DECISIONS #32–43) + advanced search (#44–45) + agent-analysis round (#46–51: Vuln Hunter, NL query, triage, MCP tools, `drishti-ir` B1). Daily plan (docs/DAILY_PLAN.md): Days 1–4 done — v0.1.0 tag, IR shrunk to `Var` 16 B / `Insn` 56 B with `RegId` tables (#52), xrefs 12 B via `drishti-disasm/src/xrefs.rs` (#53, Chrome back under budget), AI answers carry `<claims>` parsed by `drishti-server/src/claims.rs` (#54). Next: Day 5 (claim checker), then the AArch64 lifter (Days 6–10).
 
 ## Commands
 - `make check`   fmt + clippy (-D warnings) + web typecheck + all tests + schema freshness

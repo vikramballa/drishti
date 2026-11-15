@@ -5,6 +5,7 @@
 pub mod ai;
 pub mod api;
 pub mod bundle;
+pub mod claims;
 pub mod engines;
 pub mod extra;
 pub mod lookup;
@@ -146,6 +147,7 @@ pub fn router(st: Shared) -> Router {
         .route("/ai/status", get(ai::status))
         .route("/binaries/{sha}/ai/ask", post(ai::ask))
         .route("/binaries/{sha}/ai/facts", get(ai::facts))
+        .route("/binaries/{sha}/ai/claims", post(ai::claims))
         .route("/ai/cloud/{id}/models", get(ai::cloud_models_ep))
         .route("/secrets", get(secrets_get))
         .route(

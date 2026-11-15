@@ -434,6 +434,11 @@ summary { cursor: pointer; }
 .ai-ask { display: flex; gap: 8px; }
 .ai-ask input { flex: 1; }
 .ai-note { margin: 0; }
+.ai-claims { margin-top: 8px; font-size: 12.5px; }
+.ai-claims summary { cursor: pointer; color: var(--text2); }
+.ai-claims ul { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.ai-claims code { overflow-wrap: anywhere; }
+.claim-kind { display: inline-block; min-width: 64px; color: var(--muted); }
 .ai-setup p { margin: 0 0 8px; } .ai-setup ol { margin: 0 0 8px; padding-left: 20px; } .ai-setup li { margin: 4px 0; }
 .ai-sheet { font: 14px/1.5 var(--sans); white-space: normal; cursor: auto; background: var(--bg); border-radius: var(--r-lg); padding: 14px; max-width: 760px; width: 100%; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .ai-sheet > button { align-self: flex-end; }

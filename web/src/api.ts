@@ -88,7 +88,9 @@ export interface LookupService { id: string; name: string; sends: string; what: 
 export interface SecretKey { id: string; label: string; env: string; get_url: string; set: boolean; source: 'environment' | 'saved' | 'none'; hint: string | null }
 export interface StartupItem { file: string; label: string | null; when: string; program: string | null; args: string[]; app: string | null; run_at_load: boolean; keep_alive: boolean; disabled: boolean; signer: { kind: string; developer?: string | null; team?: string | null; notarized?: boolean }; level: string; note: string }
 export interface AppScan { name: string; path: string; exe: string | null; id: string | null; version: string | null; signer: StartupItem['signer']; level: string; note: string; access: string[]; kits: string[]; electron: boolean; login_items: number }
-export interface ChatTurn { role: 'user' | 'assistant'; content: string }
+/** A checkable claim from an AI answer (server `claims.rs`). */
+export interface AiClaim { kind: 'calls' | 'imports' | 'string' | 'address' | 'function'; target: string; subject?: string; facts?: number[] }
+export interface ChatTurn { role: 'user' | 'assistant'; content: string; claims?: AiClaim[] }
 
 /** Formats that contain machine code the core engine analyses. */
 export const NATIVE = ['elf', 'pe', 'pe-dotnet', 'macho', 'macho-fat', 'coff'];
@@ -217,6 +219,7 @@ export const api = {
   settings: () => req<Record<string, unknown>>('/settings'),
   saveSettings: (v: Record<string, unknown>) => req<unknown>('/settings', { method: 'PUT', body: JSON.stringify(v), headers: { 'content-type': 'application/json' } }),
   aiStatus: () => req<AiStatus>('/ai/status'),
+  aiClaims: (sha: string, answer: string) => req<{ prose: string; claims: AiClaim[]; checked: boolean }>(`/binaries/${sha}/ai/claims`, { method: 'POST', body: JSON.stringify({ answer }), headers: { 'content-type': 'application/json' } }),
   aiFacts: (sha: string, addr: Addr | null) => get<{ facts: string[] }>(`/binaries/${sha}/ai/facts?${q({ addr })}`),
   cloudModels: (id: string) => req<{ models: string[]; suggested: string[] }>(`/ai/cloud/${id}/models`),
   secrets: () => req<{ keys: SecretKey[] }>('/secrets'),
@@ -239,7 +242,7 @@ export const api = {
     const t = token();
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (t) headers.Authorization = `Bearer ${t}`;
-    const r = await fetch(`${BASE}/binaries/${sha}/ai/ask`, { method: 'POST', headers, body: JSON.stringify({ question, history, addr, level }), signal });
+    const r = await fetch(`${BASE}/binaries/${sha}/ai/ask`, { method: 'POST', headers, body: JSON.stringify({ question, history: history.map(({ role, content }) => ({ role, content })), addr, level }), signal });
     onMeta?.({ model: r.headers.get('x-ai-model'), where: r.headers.get('x-ai-where') });
     if (!r.ok || !r.body) {
       let msg = r.statusText;

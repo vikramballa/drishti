@@ -11,12 +11,16 @@
 //! whenever discovery results change for the same input.
 
 use crate::analyze::{Analysis, Discovery, Func, Options, Stats, XrefC};
+use crate::xrefs::XrefTable;
 use drishti_model::{NameSource, XrefKind};
 
 const MAGIC: &[u8; 8] = b"DRISHTIC";
-const FORMAT: u32 = 1;
+/// 2: the xref offset base is stored, so decoding fills the compact table
+/// directly (no transient full-width copy).
+const FORMAT: u32 = 2;
 /// Bump when analysis output changes for identical input and options.
-pub const ANALYSIS_REV: u32 = 2;
+/// 3 (Day 3): xrefs sorted by `(to, from, kind)`, every duplicate removed.
+pub const ANALYSIS_REV: u32 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
@@ -162,8 +166,9 @@ pub fn encode(a: &Analysis) -> Vec<u8> {
     }
     // Xrefs are sorted by `to`: delta-encode `to`, `from` relative to `to`.
     w.u(a.xrefs.len() as u64);
+    w.u(a.xrefs.base());
     let mut prev = 0u64;
-    for x in &a.xrefs {
+    for x in a.xrefs.iter() {
         w.u(x.to.wrapping_sub(prev));
         prev = x.to;
         w.i(x.from.wrapping_sub(x.to) as i64);
@@ -318,7 +323,7 @@ pub fn decode(b: &[u8]) -> Result<Analysis, CacheError> {
         });
     }
     let nx = r.len(3)?;
-    let mut xrefs = Vec::with_capacity(nx);
+    let mut xrefs = XrefTable::new(r.u()?, nx);
     let mut prev = 0u64;
     for _ in 0..nx {
         let to = prev.checked_add(r.u()?).ok_or(CacheError::Corrupt)?;
@@ -417,23 +422,26 @@ mod tests {
             f(0x2000, "sub_2000", NameSource::Engine),
             f(0x3000, "die", NameSource::Symbol),
         ];
-        let xrefs = vec![
-            XrefC {
-                from: 0x1010,
-                to: 0x2000,
-                kind: XrefKind::Call,
-            },
-            XrefC {
-                from: 0x2004,
-                to: 0x3000,
-                kind: XrefKind::Jump,
-            },
-            XrefC {
-                from: 0x1000,
-                to: 0x9000,
-                kind: XrefKind::DataRead,
-            },
-        ];
+        let xrefs = XrefTable::from_vec(
+            0x1000,
+            vec![
+                XrefC {
+                    from: 0x1010,
+                    to: 0x2000,
+                    kind: XrefKind::Call,
+                },
+                XrefC {
+                    from: 0x2004,
+                    to: 0x3000,
+                    kind: XrefKind::Jump,
+                },
+                XrefC {
+                    from: 0x1000,
+                    to: 0x9000,
+                    kind: XrefKind::DataRead,
+                },
+            ],
+        );
         Analysis::from_parts(
             functions,
             xrefs,

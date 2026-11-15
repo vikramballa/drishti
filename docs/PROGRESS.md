@@ -122,11 +122,11 @@ Full ordered plan with acceptance criteria: [ROADMAP.md](ROADMAP.md).
 
 - ARM32/Thumb, MIPS, RISC-V, PPC: display-only (capstone); no analysis yet.
 - AArch64 jump-table variants without a preceding `cmp` bound are capped at 64 entries.
-- Chrome-scale binaries are above the 450 MB budget (527 MB, with 40 % more functions than when the budget was set). Next lever: smaller xref records (24 → 16 bytes) and the per-function `Func` summary.
+- Chrome-scale binaries: back under the 450 MB budget after Day 3 (peak footprint 419 MB for `functions`, was 488 MB). Next lever: the per-function `Func` summary.
 - Corpus binaries only build on macOS (`clang -arch`), so Linux CI skips corpus-based tests and E2E.
 - Phase 3: adapter base, Ghidra/angr workers in Docker with sandbox, comparison engine.
 - Documents: encrypted PDFs (even with an empty password) hide Info strings; Office (OOXML `docProps`, OLE summary info) provenance is the natural next step; no certificate-chain validation for signatures.
-- AI: no claim verifier yet (D3); answers aren't cached; not added to the Playwright journey (needs a model in CI).
+- AI: answers carry structured claims (Day 4) but no checker yet (Day 5); answers aren't cached; not added to the Playwright journey (needs a model in CI).
 
 ## Agent analysis round (2026-11-12): Vuln Hunter, NL query, Triage, IR B1
 Requested features (6) analysed; built the three that reuse existing infra end-to-end, plus the IR foundation. Binary rewriting kept analysis-only (user choice). DECISIONS #46–51.
@@ -144,3 +144,15 @@ Requested features (6) analysed; built the three that reuse existing infra end-t
 - [x] Fuzz: clean 1 h re-run of all 4 targets, 0 crashes (table under "Fuzz run" above)
 - [x] `make check` was failing on `cargo fmt` (stray blank line in `drishti-server/src/ai.rs`); fixed, now green (90 tests)
 - [x] Tagged `v0.1.0`
+
+## Days 2–4 (2026-11-15): smaller IR, smaller xrefs, checkable AI claims
+- [x] **Day 2 — IR shrink** (DECISIONS #52): `RegId(u16)` per-architecture register tables (AArch64, x86-64), `u64` constants + boxed `Wide`, `Var::Mem` removed, typed `Place` destinations, boxed `Intrinsic`. `Var` 32 → 16 B, `Insn` 128 → 56 B (size test). Fixed shift-amount truncation and 128-bit `Concat`/`Extract` overflow. IR tests 7 → 14. `docs/IR.md` updated.
+- [x] **Day 3 — xrefs 24 → 12 bytes** (DECISIONS #53): compact table with a side table for out-of-range xrefs; `ANALYSIS_REV` 3, cache format 2. `drishti analyze` output byte-identical (ignoring `started_at`/`duration_ms`) on all 45 corpus files, Telegram (462 MB JSON) and Chrome Framework (1.7 GB JSON).
+
+  | `DRISHTI_MEMSTAT=1 drishti functions` | heap peak before | after | footprint peak before | after |
+  |---|---|---|---|---|
+  | Chrome Framework (695k fns, 5.2M xrefs) | 589 MB | 434 MB | 488 MB | 419 MB |
+  | Telegram (255k fns, 2.8M xrefs) | 224 MB | 178 MB | 220 MB | 187 MB |
+
+- [x] **Day 4 — structured AI claims** (DECISIONS #54): `<claims>` block in the prompt, lenient parser (`claims.rs`, 3 tests including a sample answer parsed into 5 claims), `POST /binaries/{sha}/ai/claims`, UI hides the block while streaming and lists "What this answer claims · not checked yet". Old answers unchanged.
+- [x] `make check` green (103 tests), `make e2e` green (desktop + phone), claims endpoint tested on a live release server.

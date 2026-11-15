@@ -10,6 +10,7 @@
 //! so a 200 MB binary does not need gigabytes of resident block tables.
 
 use crate::arch::{A64Op, Decoded, Flow, decode_a64, decode_x86};
+use crate::xrefs::{XrefTable, Xrefs};
 use drishti_loader::Image;
 use drishti_model::{Arch, EdgeKind, NameSource, SymbolKind, XrefKind};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -123,9 +124,9 @@ pub struct Stats {
 pub struct Analysis {
     /// Sorted by entry.
     pub functions: Vec<Func>,
-    /// Sorted by `to`.
-    pub xrefs: Vec<XrefC>,
-    /// Indices into `xrefs`, sorted by `from`.
+    /// Sorted by `(to, from, kind)`; 12 bytes per xref (see `xrefs.rs`).
+    pub xrefs: XrefTable,
+    /// Positions in `xrefs` (see `XrefTable::get`), sorted by `from`.
     by_from: Vec<u32>,
     pub stats: Stats,
     opts: Options,
@@ -135,7 +136,7 @@ impl Analysis {
     /// Rebuild from stored parts (`cache::decode`): sorts and indexes.
     pub fn from_parts(
         mut functions: Vec<Func>,
-        mut xrefs: Vec<XrefC>,
+        mut xrefs: XrefTable,
         stats: Stats,
         opts: Options,
     ) -> Analysis {
@@ -143,11 +144,8 @@ impl Analysis {
             functions.sort_unstable_by_key(|f| f.entry);
         }
         functions.dedup_by_key(|f| f.entry);
-        if !xrefs.is_sorted_by_key(|x| (x.to, x.from)) {
-            xrefs.sort_unstable_by_key(|x| (x.to, x.from));
-        }
-        xrefs.dedup();
-        let by_from = index_by_from(&xrefs);
+        xrefs.finish();
+        let by_from = xrefs.index_by_from();
         Analysis {
             functions,
             xrefs,
@@ -178,18 +176,17 @@ impl Analysis {
             .take(64)
             .find(|f| f.contains(addr))
     }
-    pub fn xrefs_to(&self, to: u64) -> &[XrefC] {
-        let lo = self.xrefs.partition_point(|x| x.to < to);
-        let hi = self.xrefs.partition_point(|x| x.to <= to);
-        &self.xrefs[lo..hi]
+    /// Xrefs whose target is `to`, sorted by `from`.
+    pub fn xrefs_to(&self, to: u64) -> Xrefs<'_> {
+        self.xrefs.to(to)
     }
+    /// Xrefs from `[from_lo, from_hi)`, sorted by `(from, to)`.
     pub fn xrefs_from(&self, from_lo: u64, from_hi: u64) -> Vec<XrefC> {
-        let lo = self
-            .by_from
-            .partition_point(|&i| self.xrefs[i as usize].from < from_lo);
+        let from = |i: u32| self.xrefs.get(i).map_or(u64::MAX, |x| x.from);
+        let lo = self.by_from.partition_point(|&i| from(i) < from_lo);
         self.by_from[lo..]
             .iter()
-            .map(|&i| self.xrefs[i as usize])
+            .filter_map(|&i| self.xrefs.get(i))
             .take_while(|x| x.from < from_hi)
             .collect()
     }
@@ -1255,7 +1252,7 @@ struct Driver<'a, 'p> {
     funcs: BTreeMap<u64, Func>,
     /// Functions that cannot return by themselves → their tail targets.
     noret_cands: HashMap<u64, Box<[u64]>>,
-    xrefs: Vec<XrefC>,
+    xrefs: XrefTable,
     stats: Stats,
     progress: &'p dyn Fn(Progress),
     cancel: &'p AtomicBool,
@@ -1622,7 +1619,7 @@ pub fn analyze(
         queue: seeds.iter().map(|&a| (a, Discovery::Seed)).collect(),
         funcs: BTreeMap::new(),
         noret_cands: HashMap::new(),
-        xrefs: Vec::with_capacity(xref_capacity_hint(img)),
+        xrefs: XrefTable::new(xref_base(img), xref_capacity_hint(img)),
         stats: Stats {
             seeds: seeds.len() as u64,
             ..Default::default()
@@ -1723,13 +1720,8 @@ pub fn analyze(
         }
     }
     functions.shrink_to_fit();
-    xrefs.sort_unstable_by_key(|x| (x.to, x.from));
-    xrefs.dedup();
-    // Shrinking reallocates (a full copy); only worth it for real slack.
-    if xrefs.capacity() - xrefs.len() > xrefs.len() / 16 {
-        xrefs.shrink_to_fit();
-    }
-    let by_from = index_by_from(&xrefs);
+    xrefs.finish();
+    let by_from = xrefs.index_by_from();
     stats.duration_ms = t0.elapsed().as_millis() as u64;
     progress(Progress {
         phase: "done",
@@ -1769,32 +1761,16 @@ fn xref_capacity_hint(img: &Image) -> usize {
         .clamp(1 << 12, 1 << 26)
 }
 
-/// Indices of `xrefs` ordered by `from`. Sorting contiguous (from, index)
-/// pairs avoids random access into the xref table (2–3× faster on
-/// millions of xrefs than sorting indices by key).
-fn index_by_from(xrefs: &[XrefC]) -> Vec<u32> {
-    // Usual case: every `from` lies within 4 GB of the lowest one and the
-    // index fits in 32 bits, so (from − min, index) packs into one u64:
-    // half the temporary memory of (u64, u32) pairs and a faster sort,
-    // with the same resulting order.
-    let lo = xrefs.iter().map(|x| x.from).min().unwrap_or(0);
-    let hi = xrefs.iter().map(|x| x.from).max().unwrap_or(0);
-    if hi - lo <= u64::from(u32::MAX) && u32::try_from(xrefs.len()).is_ok() {
-        let mut keys: Vec<u64> = xrefs
-            .iter()
-            .enumerate()
-            .map(|(i, x)| ((x.from - lo) << 32) | i as u64)
-            .collect();
-        keys.sort_unstable();
-        return keys.into_iter().map(|k| k as u32).collect();
-    }
-    let mut pairs: Vec<(u64, u32)> = xrefs
+/// Base for the 32-bit xref offsets: the lowest address the image maps
+/// (ignoring `__PAGEZERO`-style reservations with no access rights).
+fn xref_base(img: &Image) -> u64 {
+    img.segments
         .iter()
-        .enumerate()
-        .map(|(i, x)| (x.from, i as u32))
-        .collect();
-    pairs.sort_unstable();
-    pairs.into_iter().map(|(_, i)| i).collect()
+        .filter(|s| s.vsize > 0 && s.perms != 0)
+        .map(|s| s.vaddr)
+        .chain(img.code.iter().map(|c| c.start))
+        .min()
+        .unwrap_or(0)
 }
 
 /// Public wrapper so the renderer can annotate adrp/add/ldr sequences.
@@ -1809,36 +1785,6 @@ pub fn a64_track_pub(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn index_by_from_matches_reference_order() {
-        let reference = |xs: &[XrefC]| {
-            let mut v: Vec<u32> = (0..xs.len() as u32).collect();
-            v.sort_by_key(|&i| (xs[i as usize].from, i));
-            v
-        };
-        let mk = |from: u64, to: u64| XrefC {
-            from,
-            to,
-            kind: XrefKind::Call,
-        };
-        // Packed path (span < 4 GB), with duplicate `from` values.
-        let a: Vec<XrefC> = [
-            0x1_0000_0010u64,
-            0x1_0000_0000,
-            0x1_0000_0010,
-            0x1_8000_0000,
-        ]
-        .iter()
-        .enumerate()
-        .map(|(i, &f)| mk(f, i as u64))
-        .collect();
-        assert_eq!(index_by_from(&a), reference(&a));
-        // Fallback path (span > 4 GB).
-        let b = vec![mk(u64::MAX - 1, 0), mk(5, 1), mk(1 << 40, 2), mk(5, 3)];
-        assert_eq!(index_by_from(&b), reference(&b));
-        assert!(index_by_from(&[]).is_empty());
-    }
 
     #[test]
     fn noreturn_names() {

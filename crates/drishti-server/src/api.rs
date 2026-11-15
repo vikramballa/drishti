@@ -1442,6 +1442,7 @@ pub async fn openapi() -> Json<Value> {
             "/api/v1/binaries/{sha}/nl-query": {"post": {"description": "{question} → function query + matches (plain-English search)"}},
             "/api/v1/ai/status": {"get": {"description": "local AI server, installed models, chosen model"}},
             "/api/v1/binaries/{sha}/ai/ask": {"post": {"description": "{question, history?, addr?} → streamed text/plain answer"}},
+            "/api/v1/binaries/{sha}/ai/claims": {"post": {"description": "{answer} → {prose, claims: [{kind, target, subject?, facts?}], checked}"}},
         }
     }))
 }

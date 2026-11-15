@@ -5,7 +5,8 @@
 //! The model only sees a compact FACTS block built from Drishti's own
 //! static results (summary, findings, behaviours, document report, …); it
 //! never sees or runs the file itself. Answers stream to the browser as
-//! plain text.
+//! plain text. Answers end with a `<claims>` block (`claims.rs`) that the
+//! UI hides and sends to `/ai/claims` to get structured, checkable claims.
 //!
 //! Safety:
 //! - Plain `http://` to the configured server only. In server mode the URL
@@ -605,6 +606,25 @@ pub async fn facts(
     Ok(Json(json!({"facts": number_facts(&f).1})))
 }
 
+#[derive(Deserialize)]
+pub struct ClaimsReq {
+    answer: String,
+}
+
+/// `POST /binaries/{sha}/ai/claims` — split a finished answer into the prose
+/// shown to the person and the structured claims it makes (`claims.rs`).
+/// Claims are not checked yet (`checked: false`); the checker comes next.
+pub async fn claims(Path(sha): Path<String>, Json(req): Json<ClaimsReq>) -> R<Json<Value>> {
+    valid_sha(&sha)?;
+    if req.answer.len() > 64 << 10 {
+        return Err(bad("answer is too long (64 KB max)"));
+    }
+    let p = crate::claims::parse(&req.answer);
+    Ok(Json(
+        json!({"prose": p.prose, "claims": p.claims, "checked": false}),
+    ))
+}
+
 enum Route {
     Local {
         cfg: AiConfig,
@@ -668,7 +688,11 @@ pub async fn ask(
     let target = route(&st, &sha).await?;
     let facts = build_facts(&st, &sha, req.addr.as_deref()).await?;
     let (facts, _) = number_facts(&facts);
-    let system = format!("{SYSTEM}{}", level_note(req.level.as_deref()));
+    let system = format!(
+        "{SYSTEM}\n{}{}",
+        crate::claims::PROMPT,
+        level_note(req.level.as_deref())
+    );
 
     let mut turns = vec![
         json!({"role": "user", "content": format!("<FACTS>\n{facts}</FACTS>\nI will now ask questions about this file.")}),

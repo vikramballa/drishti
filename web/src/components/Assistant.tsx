@@ -5,7 +5,7 @@
 // (and per function) while the page is open.
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { AiStatus, api, ChatTurn } from '../api';
+import { AiClaim, AiStatus, api, ChatTurn } from '../api';
 import { Icon } from './Icon';
 import { notify } from '../store';
 
@@ -37,6 +37,35 @@ function visible(t: string): string {
   const s = t.replace(/<think>[\s\S]*?<\/think>/g, '');
   const open = s.indexOf('<think>');
   return (open >= 0 ? s.slice(0, open) : s).trimStart();
+}
+
+/** While streaming, hide the machine-readable `<claims>` block (and a tag
+ *  that is still arriving, like `<cla`). The server parses it at the end. */
+function shown(t: string): string {
+  const v = visible(t);
+  const at = v.toLowerCase().indexOf('<claims>');
+  let s = at >= 0 ? v.slice(0, at) : v;
+  const lt = s.lastIndexOf('<');
+  if (lt >= 0 && '<claims>'.startsWith(s.slice(lt).toLowerCase())) s = s.slice(0, lt);
+  // A block wrapped in a code fence leaves an unclosed "```" behind.
+  if ((s.match(/```/g)?.length ?? 0) % 2) s = s.replace(/```[a-z]*\s*$/i, '');
+  return s.trimEnd();
+}
+
+const KIND: Record<AiClaim['kind'], string> = { calls: 'Calls', imports: 'Imports', string: 'Text', address: 'Address', function: 'Function' };
+
+/** The concrete things an answer claims, so they can be checked. */
+function Claims({ claims }: { claims: AiClaim[] }) {
+  return (
+    <details class="ai-claims">
+      <summary>What this answer claims ({claims.length}) · <span class="muted">not checked yet</span></summary>
+      <ul>
+        {claims.map((c) => (
+          <li><span class="claim-kind">{KIND[c.kind] ?? c.kind}</span> <code>{c.subject ? `${c.subject} → ${c.target}` : c.target}</code></li>
+        ))}
+      </ul>
+    </details>
+  );
 }
 
 type Cite = (id: number) => void;
@@ -140,7 +169,7 @@ export function Assistant({ sha, kind, addr, fnName, autoAsk, full, localOnly, o
     abort.current = ac;
     let answer = '';
     try {
-      answer = await api.ask(sha, text, history, addr ?? null, (all) => { latest.current = all; setLive(visible(all)); }, ac.signal, level, (m) => setWhere(m.where));
+      answer = await api.ask(sha, text, history, addr ?? null, (all) => { latest.current = all; setLive(shown(all)); }, ac.signal, level, (m) => setWhere(m.where));
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         notify((e as Error).message, 'error', undefined, 8000);
@@ -154,7 +183,16 @@ export function Assistant({ sha, kind, addr, fnName, autoAsk, full, localOnly, o
     } finally {
       abort.current = null;
     }
-    setTurns((t) => [...t, { role: 'assistant', content: visible(answer) || '(no answer)' }]);
+    // Split the answer into prose + structured claims (old answers have none).
+    const raw = visible(answer);
+    let turn: ChatTurn = { role: 'assistant', content: shown(raw) || '(no answer)' };
+    if (raw) {
+      try {
+        const p = await api.aiClaims(sha, raw);
+        turn = { role: 'assistant', content: p.prose || turn.content, claims: p.claims.length ? p.claims : undefined };
+      } catch { /* keep the locally cleaned text */ }
+    }
+    setTurns((t) => [...t, turn]);
     setLive(null);
   };
   const stop = () => abort.current?.abort();
@@ -219,7 +257,7 @@ export function Assistant({ sha, kind, addr, fnName, autoAsk, full, localOnly, o
         </div>
       )}
       <div class="ai-chat">
-        {turns.map((t) => (t.role === 'user' ? <div class="ai-q">{t.content}</div> : <div class="ai-a"><Prose text={t.content} cite={cite} /></div>))}
+        {turns.map((t) => (t.role === 'user' ? <div class="ai-q">{t.content}</div> : <div class="ai-a"><Prose text={t.content} cite={cite} />{t.claims?.length ? <Claims claims={t.claims} /> : null}</div>))}
         {live !== null && <div class="ai-a">{live ? <Prose text={live} cite={cite} /> : <span class="ai-thinking"><i />Reading the facts…</span>}</div>}
         <div ref={endRef} />
       </div>

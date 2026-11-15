@@ -1,7 +1,7 @@
 # Drishti IR (`drishti-ir`)
 
 Status: **B1 done** (2026-11-12) — IR types, pretty-printer and reference
-interpreter. B2 (AArch64 / x86-64 lifters) and B3 (Unicorn differential tests)
+interpreter; shrunk on 2026-11-15 (Day 2) before the lifter. B2 (AArch64 / x86-64 lifters) and B3 (Unicorn differential tests)
 are next. Spec: `PROJECT_SPEC.md` §7.4.
 
 The IR is a small, typed, P-code-like language. Every value has a bit width.
@@ -9,20 +9,46 @@ It exists so analysis (SSA, dataflow, dead-flag elimination, emulation) and the
 decompiler can reason about one normalised instruction set instead of two
 machine ISAs.
 
-## Varnodes (`Var`)
+## Varnodes (`Var`) and destinations (`Place`)
 
-A varnode is a typed storage location:
+A `Var` is a value an operation reads:
 
 | Variant | Meaning |
 |---|---|
-| `Reg { name, width }` | a named machine register or flag (`rax:64`, `ZF:1`) |
+| `Reg { id, width }` | a machine register or flag (`x0:64`, `ZF:1`); a smaller width reads the low bits (`x0:32` is `w0`) |
 | `Temp { id, width }` | a lifter-local temporary (`t3:64`) |
-| `Const { value, width }` | a constant (`0x8:64`) |
-| `Mem { addr, width }` | a little-endian memory cell at the address the `addr` varnode evaluates to |
+| `Const { value, width }` | a constant up to 64 bits (`0x8:64`) |
+| `Wide { value, width }` | a boxed constant wider than 64 bits (rare: vector immediates) |
 
-Widths are in bits. Flags are 1-bit registers (`CF`, `ZF`, `SF`, `OF`, `PF`,
-`AF`) — the lifter models them explicitly; dead-flag elimination happens later
-in analysis, not in the lifter.
+A `Place` is where an operation writes: `Reg { id, width }` or `Temp { id, width }`.
+Constants are not destinations (the type system rules it out) and memory is
+reached only through `Load` / `Store`. Writing a register with a smaller width
+zero-extends into the full register (AArch64 `W` and scalar-FP writes, x86-64
+32-bit writes); writes that keep the upper bits (x86 `ax`/`al`) are lifted
+explicitly as `Extract` + `Concat`.
+
+Widths are in bits. Flags are 1-bit registers (AArch64 `N Z C V`; x86-64 `CF`,
+`PF`, `AF`, `ZF`, `SF`, `DF`, `OF`) — the lifter models them explicitly;
+dead-flag elimination happens later in analysis, not in the lifter.
+
+### Registers (`RegId`)
+
+A `RegId` is a `u16`: the high byte picks the architecture, the low byte
+indexes that architecture's table (`Arch::regs()`, `Arch::reg("x0")`,
+`RegId::name()`, `RegId::width()`). Only full architectural registers are in
+the tables; there is no zero register (`xzr` reads lift to the constant 0).
+
+| Arch | Table |
+|---|---|
+| `Aarch64` | `x0`–`x30`, `sp`, `pc`, `N Z C V`, `v0`–`v31` (128), `fpcr`, `fpsr`, `tpidr_el0` |
+| `X86_64` | `rax`…`r15` (encoding order), `rip`, `CF PF AF ZF SF DF OF`, `xmm0`–`xmm15` (128), `fs_base`, `gs_base` |
+
+### Size budget
+
+Checked by the `sizes` unit test: `Var` 16 B, `Place` 8 B, `Op` 48 B, `Insn`
+56 B, with no heap use except wide constants and `Intrinsic` (boxed). Before
+Day 2 (2026-11-15) `Var` was 32 B and `Insn` 128 B, plus a heap `String` per
+register mention and a `Box` per memory varnode.
 
 ## Operations (`Op`)
 
@@ -37,7 +63,7 @@ Each `Op` has at most one destination, which fixes the result width.
 | Comparison (→ width 1) | `Bin(Eq/Ne/Ult/Ule/Slt/Sle)` |
 | Flag helpers (→ width 1) | `Bin(Carry/Scarry/Sborrow)` |
 | Control flow | `Branch`, `CBranch`, `BranchInd`, `Call`, `CallInd`, `Return` |
-| Other | `Intrinsic(name, ins, out)`, `Undef` |
+| Other | `Intrinsic(Box<{name, ins, out}>)`, `Undef` |
 
 `Insn { addr, op }` tags each operation with the machine address it was lifted
 from, so one machine instruction becomes a sequence of address-tagged `Insn`s.
@@ -51,6 +77,8 @@ from, so one machine instruction becomes a sequence of address-tagged `Insn`s.
 - `Carry(a,b)` = unsigned overflow of `a+b`; `Scarry(a,b)` / `Sborrow(a,b)` =
   signed overflow of `a+b` / `a-b`. These match SLEIGH/P-code `INT_CARRY`,
   `INT_SCARRY`, `INT_SBORROW`.
+- Shift amounts are not truncated: a shift by ≥ the width gives 0 (`Ashr`:
+  the sign fill).
 - Division/remainder by zero yields 0 (the lifter is expected to guard real
   divide traps separately).
 - `Concat(hi, lo)` = `(hi << width(lo)) | lo`. `Extract(a, lo, hi)` = bits
@@ -69,8 +97,8 @@ from, so one machine instruction becomes a sequence of address-tagged `Insn`s.
 
 ## Reference interpreter
 
-`State` holds registers/flags (by name) and byte-addressed little-endian
-memory. `State::exec(&Insn) -> Result<Step, StepError>` executes one operation
+`State` holds registers/flags (by `RegId`), temporaries and byte-addressed
+little-endian memory; anything never written reads as zero. `State::exec(&Insn) -> Result<Step, StepError>` executes one operation
 and returns a control-flow `Step` (`Next`, `Branch`, `NotTaken`, `Call`,
 `Indirect`, `Return`). It is deterministic and host-independent, so it is the
 oracle the lifter's differential tests (B3) will compare against: run the
