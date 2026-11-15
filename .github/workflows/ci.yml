@@ -26,6 +26,20 @@ jobs:
       # Browser E2E on macOS, where the symbolised corpus sample builds.
       - if: matrix.os == 'macos-latest'
         run: make corpus && (cd web && npx playwright install chromium) && make e2e
+      # Linux-only failures can't be reproduced on the dev Mac: keep the
+      # corpus sample exactly as the tests build it (our own benign source).
+      - if: failure() && matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p linux-samples
+          for o in O0 O2; do
+            clang -g -$o -o linux-samples/netclient-$o corpus/src/netclient.c
+            cp linux-samples/netclient-$o linux-samples/netclient-$o.stripped
+            strip linux-samples/netclient-$o.stripped
+          done
+          clang --version > linux-samples/clang-version.txt
+      - if: failure() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with: { name: linux-samples, path: linux-samples }
       - if: failure() && matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with: { name: e2e-traces, path: web/test-results, if-no-files-found: ignore }
